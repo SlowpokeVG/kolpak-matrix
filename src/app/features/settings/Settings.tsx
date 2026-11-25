@@ -21,6 +21,7 @@ import {
   Info,
   Keyboard,
   MagnifyingGlass,
+  Microphone,
   menuIcon,
   SignOut,
   Palette,
@@ -48,6 +49,7 @@ import { useSettingsFocus } from './useSettingsFocus';
 import { SettingsLinkProvider } from './SettingsLinkContext';
 import { useSettingsLinkBaseUrl } from './useSettingsLinkBaseUrl';
 import { Desktop } from './desktop';
+import { VoiceSettingsPage } from '../../../kolpak/voice/VoiceSettingsPage';
 import { isDesktopTauri } from '$utils/platform';
 import { Accessibility } from './accessibility/Accessibility';
 
@@ -59,6 +61,7 @@ enum SettingsPages {
   NotificationPage,
   DevicesPage,
   DesktopPage,
+  VoicePage,
   EmojisStickersPage,
   CosmeticsPage,
   DeveloperToolsPage,
@@ -88,6 +91,7 @@ const settingsMenuIcons: Record<
   notifications: { icon: Bell },
   devices: { icon: DevicesIcon },
   desktop: { icon: DesktopIcon },
+  voice: { icon: Microphone },
   emojis: { icon: Smiley },
   'developer-tools': { icon: Terminal },
   experimental: { icon: Flask },
@@ -103,6 +107,7 @@ const settingsPageToSectionId: Record<SettingsPages, SettingsSectionId> = {
   [SettingsPages.NotificationPage]: 'notifications',
   [SettingsPages.DevicesPage]: 'devices',
   [SettingsPages.DesktopPage]: 'desktop',
+  [SettingsPages.VoicePage]: 'voice',
   [SettingsPages.EmojisStickersPage]: 'emojis',
   [SettingsPages.CosmeticsPage]: 'appearance',
   [SettingsPages.DeveloperToolsPage]: 'developer-tools',
@@ -120,6 +125,7 @@ const settingsSectionIdToPage: Record<SettingsSectionId, SettingsPages> = {
   notifications: SettingsPages.NotificationPage,
   devices: SettingsPages.DevicesPage,
   desktop: SettingsPages.DesktopPage,
+  voice: SettingsPages.VoicePage,
   emojis: SettingsPages.EmojisStickersPage,
   'developer-tools': SettingsPages.DeveloperToolsPage,
   experimental: SettingsPages.ExperimentalPage,
@@ -136,6 +142,7 @@ const settingsSectionComponents = {
   notifications: Notifications,
   devices: Devices,
   desktop: Desktop,
+  voice: VoiceSettingsPage,
   emojis: EmojisStickers,
   'developer-tools': DeveloperTools,
   experimental: Experimental,
@@ -272,7 +279,9 @@ export function Settings({
     () =>
       settingsSections
         .filter(
-          (sec) => (showPersona || sec.id !== 'persona') && (isDesktop || sec.id !== 'desktop')
+          (sec) =>
+            (showPersona || sec.id !== 'persona') &&
+            (isDesktop || (sec.id !== 'desktop' && sec.id !== 'voice'))
         )
         .map((sec) => sec.id),
     [showPersona, isDesktop]

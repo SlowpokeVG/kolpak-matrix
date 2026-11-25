@@ -1,0 +1,390 @@
+/*
+ * The live dock's VOICE section (AI/DESIGN.md §3.4): 290px, panel ground, padding 14/18.
+ * Layered like the other Kolpak components; see ../layout/status-bar.css for why Sable's
+ * layers are named first.
+ */
+@layer sable-reset, folds, reset, tokens, base, components, theme, user;
+
+@layer components {
+  .kolpak-dock {
+    flex: none;
+    width: 290px;
+    min-height: 0;
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+    padding: 14px 18px;
+
+    background: var(--kolpak-panel, var(--sable-bg-container));
+    border-left: 2px solid var(--kolpak-black, var(--sable-bg-container-line));
+    color: var(--kolpak-paper, var(--sable-bg-on-container));
+    font-family: var(--kolpak-font-body, var(--font-secondary));
+    font-size: 14px;
+  }
+
+  .kolpak-dock__voice {
+    flex: 1 1 auto;
+    min-height: 0;
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+  }
+
+  /* Section label: Anton 15, wide tracking, muted (§5). */
+  .kolpak-dock__label {
+    font-family: var(--kolpak-font-head, inherit);
+    font-size: 15px;
+    font-weight: 700;
+    font-synthesis: none;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+    color: var(--kolpak-muted, inherit);
+  }
+
+  .kolpak-dock__offline {
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+  }
+
+  .kolpak-dock__note {
+    margin: 0;
+    font-size: 13px;
+    line-height: 1.45;
+    color: var(--kolpak-muted, inherit);
+  }
+
+  /* Secondary button (§5): transparent, 2px paper border, Anton 17. */
+  .kolpak-dock__button {
+    appearance: none;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    height: 44px;
+    margin: 0;
+    padding: 0 20px;
+    cursor: pointer;
+
+    background: transparent;
+    border: 2px solid var(--kolpak-paper, currentColor);
+    color: var(--kolpak-paper, inherit);
+    font-family: var(--kolpak-font-head, inherit);
+    font-size: 17px;
+    font-weight: 700;
+    font-synthesis: none;
+    letter-spacing: 0.06em;
+    text-transform: uppercase;
+  }
+  .kolpak-dock__button:hover:not(:disabled) {
+    background: var(--kolpak-paper, currentColor);
+    color: var(--kolpak-ink, var(--sable-bg-container));
+  }
+  .kolpak-dock__button:disabled {
+    cursor: default;
+    border-color: var(--kolpak-line, currentColor);
+    color: var(--kolpak-muted, inherit);
+  }
+
+  /* The outline. Each level indents 17px; tree line-height is 1.6. */
+  .kolpak-tree {
+    flex: 1 1 auto;
+    min-height: 0;
+    margin: 0;
+    padding: 0;
+    list-style: none;
+    overflow-y: auto;
+    overflow-x: hidden;
+    font-size: 13px;
+    line-height: 1.6;
+  }
+
+  .kolpak-tree__row {
+    display: flex;
+    align-items: baseline;
+    gap: 6px;
+    min-width: 0;
+  }
+
+  /* The channel we are in is an inverted block; it hides the guides behind it. */
+  .kolpak-tree__row--channel[data-current='true'] {
+    background-image: none !important;
+    background: var(--kolpak-paper, var(--sable-sec-main));
+    color: var(--kolpak-ink, var(--sable-sec-on-main));
+    font-weight: 700;
+  }
+
+  .kolpak-tree__fold,
+  .kolpak-tree__name {
+    appearance: none;
+    margin: 0;
+    padding: 0;
+    border: 0;
+    background: none;
+    color: inherit;
+    font: inherit;
+    text-align: left;
+  }
+
+  .kolpak-tree__fold {
+    flex: none;
+    width: 11px;
+    cursor: pointer;
+  }
+  .kolpak-tree__fold:disabled {
+    cursor: default;
+  }
+
+  .kolpak-tree__name {
+    flex: 1 1 auto;
+    min-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    cursor: pointer;
+  }
+  .kolpak-tree__name:hover:not(:disabled) {
+    text-decoration: underline;
+  }
+  .kolpak-tree__name:disabled {
+    cursor: default;
+  }
+
+  .kolpak-tree__count {
+    flex: none;
+    padding-right: 4px;
+    font-variant-numeric: tabular-nums;
+  }
+
+  .kolpak-tree__user {
+    min-width: 0;
+    padding-left: 17px;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+  .kolpak-tree__row--user[data-self='true'] {
+    font-weight: 700;
+  }
+  /* Talking is green and bold. */
+  .kolpak-tree__row--user[data-talking='true'] {
+    color: var(--kolpak-green, var(--sable-success-main));
+    font-weight: 700;
+  }
+  .kolpak-tree__row--user[data-state='muted'],
+  .kolpak-tree__row--user[data-state='deafened'] {
+    color: var(--kolpak-muted, inherit);
+  }
+
+  /* Other people's names are buttons that open their menu. */
+  .kolpak-tree__person {
+    appearance: none;
+    flex: 1 1 auto;
+    margin: 0;
+    border: 0;
+    background: none;
+    color: inherit;
+    font: inherit;
+    text-align: left;
+    cursor: pointer;
+  }
+  .kolpak-tree__person:hover .kolpak-tree__who,
+  .kolpak-tree__row--user[data-open='true'] .kolpak-tree__who {
+    text-decoration: underline;
+  }
+  /* What we set for someone: their volume, or "muted for you". Never green. */
+  .kolpak-tree__local {
+    color: var(--kolpak-dim, inherit);
+    font-weight: 400;
+  }
+  /* Muted for us: the name is dimmed and struck through, the tag is not. */
+  .kolpak-tree__row--user[data-local-muted='true'] .kolpak-tree__person {
+    color: var(--kolpak-dim, inherit);
+  }
+  .kolpak-tree__row--user[data-local-muted='true'] .kolpak-tree__who {
+    text-decoration: line-through;
+  }
+
+  /*
+   * A person's menu: its own line under their row, the tree's full width and not indented,
+   * so it never runs past the dock's edge. Two compact rows: the volume slider with its
+   * value, then MUTE FOR ME and RESET.
+   */
+  .kolpak-tree__menu {
+    margin: 2px 0 6px;
+  }
+  .kolpak-person {
+    box-sizing: border-box;
+    width: 100%;
+    padding: 8px;
+    border: 2px solid var(--kolpak-paper, currentColor);
+    background: var(--kolpak-black, transparent);
+    color: var(--kolpak-paper, inherit);
+  }
+  .kolpak-person__volume {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+  }
+  .kolpak-person__volume .kolpak-range {
+    flex: 1 1 auto;
+    min-width: 0;
+  }
+  .kolpak-person__value {
+    flex: none;
+    width: 4.5ch;
+    text-align: right;
+    font-weight: 700;
+  }
+  .kolpak-person__actions {
+    display: flex;
+    gap: 6px;
+    margin-top: 6px;
+  }
+  .kolpak-person__button {
+    appearance: none;
+    flex: 1 1 auto;
+    min-width: 0;
+    height: 28px;
+    margin: 0;
+    padding: 0 6px;
+    border: 2px solid var(--kolpak-line, currentColor);
+    background: none;
+    color: var(--kolpak-paper, inherit);
+    font: inherit;
+    font-size: 12px;
+    font-weight: 700;
+    text-transform: uppercase;
+    white-space: nowrap;
+    cursor: pointer;
+  }
+  .kolpak-person__reset {
+    flex: none;
+  }
+  .kolpak-person__button:hover:not(:disabled) {
+    border-color: var(--kolpak-paper, currentColor);
+  }
+  .kolpak-person__button[aria-pressed='true'] {
+    border-color: var(--kolpak-paper, currentColor);
+    background: var(--kolpak-paper, var(--sable-sec-main));
+    color: var(--kolpak-ink, var(--sable-sec-on-main));
+  }
+  .kolpak-person__button:disabled {
+    color: var(--kolpak-dim, inherit);
+    cursor: default;
+  }
+
+  /*
+   * Slider in the house style: a 2px line, paper up to the knob, and a square paper knob.
+   * The page sets --kolpak-range-fill to the knob's position.
+   */
+  .kolpak-range {
+    appearance: none;
+    height: 16px;
+    margin: 0;
+    background: transparent;
+    cursor: pointer;
+  }
+  .kolpak-range::-webkit-slider-runnable-track {
+    height: 2px;
+    background: linear-gradient(
+      to right,
+      var(--kolpak-paper, currentColor) var(--kolpak-range-fill, 50%),
+      var(--kolpak-line, currentColor) var(--kolpak-range-fill, 50%)
+    );
+  }
+  .kolpak-range::-webkit-slider-thumb {
+    appearance: none;
+    width: 12px;
+    height: 12px;
+    margin-top: -5px;
+    border: 0;
+    border-radius: 0;
+    background: var(--kolpak-paper, currentColor);
+  }
+  .kolpak-range::-moz-range-track {
+    height: 2px;
+    background: var(--kolpak-line, currentColor);
+  }
+  .kolpak-range::-moz-range-progress {
+    height: 2px;
+    background: var(--kolpak-paper, currentColor);
+  }
+  .kolpak-range::-moz-range-thumb {
+    width: 12px;
+    height: 12px;
+    border: 0;
+    border-radius: 0;
+    background: var(--kolpak-paper, currentColor);
+  }
+  .kolpak-range:disabled {
+    cursor: default;
+    opacity: 0.4;
+  }
+  .kolpak-range:focus-visible {
+    outline: 2px solid var(--kolpak-orange, currentColor);
+    outline-offset: 2px;
+  }
+
+  /* Controls pinned to the bottom, 8px apart: two 44px squares and LEAVE filling the rest. */
+  .kolpak-dock__controls {
+    flex: none;
+    display: flex;
+    gap: 8px;
+  }
+
+  .kolpak-dock__square {
+    appearance: none;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    flex: none;
+    width: 44px;
+    height: 44px;
+    margin: 0;
+    padding: 0;
+
+    background: transparent;
+    border: 2px solid var(--kolpak-line, currentColor);
+    color: var(--kolpak-muted, inherit);
+    cursor: pointer;
+  }
+  .kolpak-dock__square--small {
+    width: 32px;
+    height: 32px;
+  }
+  .kolpak-dock__square--small svg {
+    width: 16px;
+    height: 16px;
+  }
+  .kolpak-dock__square:disabled {
+    cursor: default;
+  }
+  /* Icons: 20px stroke, 2px, mitred joins (DESIGN 2.5). */
+  .kolpak-dock__square svg {
+    fill: none;
+    stroke: currentColor;
+    stroke-width: 2;
+    stroke-linejoin: miter;
+    stroke-linecap: square;
+  }
+  /* Mic live is a green fill. */
+  .kolpak-dock__mic[aria-pressed='true'] {
+    background: var(--kolpak-green, var(--sable-success-main));
+    border-color: var(--kolpak-green, var(--sable-success-main));
+    color: var(--kolpak-ink, var(--sable-success-on-main));
+  }
+  /* Deafen is a paper outline, filled while deafened. */
+  .kolpak-dock__deaf {
+    border-color: var(--kolpak-paper, currentColor);
+    color: var(--kolpak-paper, inherit);
+  }
+  .kolpak-dock__deaf[aria-pressed='true'] {
+    background: var(--kolpak-paper, currentColor);
+    color: var(--kolpak-ink, var(--sable-bg-container));
+  }
+
+  .kolpak-dock__leave {
+    flex: 1 1 auto;
+    padding: 0;
+  }
+}

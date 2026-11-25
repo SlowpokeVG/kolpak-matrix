@@ -1,0 +1,495 @@
+/*
+ * Theater mode (AI/DESIGN.md §4): grid of space rail | stream 1fr | chat 320px, with the
+ * status bar under all of it (the rail and the bar come from the client layout).
+ * Layered like the other Kolpak components; see ../layout/status-bar.css.
+ */
+@layer sable-reset, folds, reset, tokens, base, components, theme, user;
+
+@layer components {
+  .kolpak-theater {
+    flex: 1 1 auto;
+    min-width: 0;
+    min-height: 0;
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) 320px;
+    background: var(--kolpak-black, var(--sable-surface-container));
+    color: var(--kolpak-paper, var(--sable-surface-on-container));
+    font-family: var(--kolpak-font-body, var(--font-secondary));
+    font-size: 14px;
+  }
+
+  .kolpak-theater__main {
+    display: flex;
+    flex-direction: column;
+    min-width: 0;
+    min-height: 0;
+  }
+
+  /* 52px header: ON AIR · streamer Anton 22 · stats · format switch · EXIT THEATER. */
+  .kolpak-theater__head {
+    flex: none;
+    height: 52px;
+    box-sizing: border-box;
+    padding: 0 20px;
+    display: flex;
+    align-items: center;
+    gap: 14px;
+    border-bottom: 2px solid var(--kolpak-panel, var(--sable-surface-container-line));
+    min-width: 0;
+  }
+
+  .kolpak-theater__title {
+    margin: 0;
+    min-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    font-family: var(--kolpak-font-head, inherit);
+    font-size: 22px;
+    font-weight: 700;
+    font-synthesis: none;
+    letter-spacing: 0.03em;
+    text-transform: uppercase;
+  }
+
+  .kolpak-theater__stats {
+    display: flex;
+    gap: 14px;
+    color: var(--kolpak-muted, inherit);
+    font-size: 13px;
+    font-variant-numeric: tabular-nums;
+    white-space: nowrap;
+  }
+
+  .kolpak-theater__formats {
+    margin-left: auto;
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    font-size: 13px;
+  }
+  .kolpak-theater__formats button {
+    appearance: none;
+    margin: 0;
+    padding: 2px 8px;
+    border: 0;
+    background: none;
+    color: var(--kolpak-muted, inherit);
+    font: inherit;
+    cursor: pointer;
+  }
+  .kolpak-theater__formats button:disabled {
+    cursor: default;
+    opacity: 0.5;
+  }
+  /* The active format is an inverted paper block. */
+  .kolpak-theater__formats button[aria-pressed='true'] {
+    background: var(--kolpak-paper, var(--sable-sec-main));
+    color: var(--kolpak-ink, var(--sable-sec-on-main));
+    font-weight: 700;
+    opacity: 1;
+  }
+
+  /* Secondary button at 32px (§5): 2px paper border, Anton 15. */
+  .kolpak-theater__button {
+    appearance: none;
+    flex: none;
+    height: 32px;
+    margin: 0;
+    padding: 0 12px;
+    border: 2px solid var(--kolpak-paper, currentColor);
+    background: none;
+    color: var(--kolpak-paper, inherit);
+    font-family: var(--kolpak-font-head, inherit);
+    font-size: 15px;
+    font-weight: 700;
+    font-synthesis: none;
+    letter-spacing: 0.04em;
+    cursor: pointer;
+  }
+  .kolpak-theater__button:hover:not(:disabled) {
+    background: var(--kolpak-paper, currentColor);
+    color: var(--kolpak-ink, var(--sable-surface-container));
+  }
+  .kolpak-theater__button:disabled {
+    cursor: default;
+    border-color: var(--kolpak-line, currentColor);
+    color: var(--kolpak-muted, inherit);
+  }
+
+  .kolpak-theater__body {
+    flex: 1 1 auto;
+    min-height: 0;
+    padding: 16px 20px 16px;
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+  }
+
+  /* The picture fills the column; no frame in theater. */
+  .kolpak-stream__picture.kolpak-theater__picture {
+    flex: 1 1 auto;
+    min-height: 0;
+    aspect-ratio: auto;
+    border: 0;
+  }
+
+  .kolpak-theater__label {
+    flex: none;
+    margin-right: 4px;
+    font-family: var(--kolpak-font-head, inherit);
+    font-size: 15px;
+    font-weight: 700;
+    font-synthesis: none;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+    color: var(--kolpak-muted, inherit);
+  }
+
+  /* Channel chips: live = orange dot + name + viewers; selected = paper; offline = muted. */
+  .kolpak-theater__channels {
+    flex: none;
+    display: flex;
+    align-items: center;
+    flex-wrap: wrap;
+    gap: 8px 10px;
+  }
+  .kolpak-theater__chip {
+    appearance: none;
+    display: inline-flex;
+    align-items: center;
+    gap: 8px;
+    margin: 0;
+    padding: 6px 10px;
+    border: 0;
+    background: var(--kolpak-panel, var(--sable-surface-var-container));
+    color: var(--kolpak-muted, inherit);
+    font: inherit;
+    cursor: pointer;
+  }
+  .kolpak-theater__chip[data-live='true'] {
+    color: var(--kolpak-paper, inherit);
+    font-weight: 700;
+  }
+  .kolpak-theater__chip[aria-pressed='true'] {
+    background: var(--kolpak-paper, var(--sable-sec-main));
+    color: var(--kolpak-ink, var(--sable-sec-on-main));
+    font-weight: 700;
+  }
+  .kolpak-theater__chip .kolpak-onair__dot {
+    width: 8px;
+    height: 8px;
+    border-radius: 50%;
+    background: var(--kolpak-orange, var(--sable-primary-main));
+  }
+
+  /*
+   * Voice line: "in voice" on the left; on the right the channel (a button that opens the
+   * channel list) and the mic and deafen squares. One 48px panel row.
+   */
+  .kolpak-voice-strip {
+    flex: none;
+    height: 48px;
+    box-sizing: border-box;
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    padding: 0 8px 0 14px;
+    background: var(--kolpak-panel, var(--sable-surface-var-container));
+    color: var(--kolpak-muted, inherit);
+    font-size: 13px;
+  }
+  .kolpak-voice-strip__state {
+    display: inline-flex;
+    align-items: center;
+    gap: 8px;
+  }
+  /* Presence square (§2.5): green while in voice, an outline when not. */
+  .kolpak-voice-strip__dot {
+    width: 8px;
+    height: 8px;
+    box-sizing: border-box;
+    border: 1px solid var(--kolpak-dim, currentColor);
+  }
+  .kolpak-voice-strip[data-connected='true'] .kolpak-voice-strip__state {
+    color: var(--kolpak-paper, inherit);
+  }
+  .kolpak-voice-strip[data-connected='true'] .kolpak-voice-strip__dot {
+    border: 0;
+    background: var(--kolpak-green, var(--sable-success-main));
+  }
+  /* The dot is square, unlike the live dot. */
+  .kolpak-theme .kolpak-voice-strip__dot {
+    border-radius: 0 !important;
+  }
+  /* A refusal from the server (say, a channel we may not enter), for a few seconds. */
+  .kolpak-voice-strip__refusal {
+    min-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    color: var(--kolpak-orange, var(--sable-critical-main));
+  }
+  .kolpak-voice-strip__right {
+    margin-left: auto;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+  }
+
+  .kolpak-voice-strip__channel-box {
+    position: relative;
+  }
+  .kolpak-voice-strip__channel {
+    appearance: none;
+    display: inline-flex;
+    align-items: center;
+    gap: 8px;
+    height: 32px;
+    margin: 0 4px 0 0;
+    padding: 0 10px;
+    border: 2px solid var(--kolpak-line, currentColor);
+    background: none;
+    color: var(--kolpak-paper, inherit);
+    font: inherit;
+    font-weight: 700;
+    cursor: pointer;
+  }
+  .kolpak-voice-strip__channel svg {
+    fill: none;
+    stroke: currentColor;
+    stroke-width: 2;
+  }
+  .kolpak-voice-strip__channel:hover,
+  .kolpak-voice-strip__channel[aria-expanded='true'] {
+    border-color: var(--kolpak-paper, currentColor);
+  }
+
+  /* The channel list opens upwards from the channel button. */
+  .kolpak-voice-picker {
+    position: absolute;
+    right: 0;
+    bottom: calc(100% + 6px);
+    z-index: 10;
+    width: 280px;
+    max-height: min(420px, 60vh);
+    overflow-y: auto;
+    background: var(--kolpak-black, var(--sable-surface-container));
+    border: 2px solid var(--kolpak-paper, currentColor);
+  }
+  .kolpak-voice-picker ul {
+    margin: 0;
+    padding: 4px 0;
+    list-style: none;
+  }
+  .kolpak-voice-picker button {
+    appearance: none;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    width: 100%;
+    margin: 0;
+    padding: 5px 10px;
+    border: 0;
+    background: none;
+    color: var(--kolpak-paper, inherit);
+    font: inherit;
+    font-size: 13px;
+    text-align: left;
+    cursor: pointer;
+  }
+  .kolpak-voice-picker button:hover {
+    background: var(--kolpak-panel, rgba(127, 127, 127, 0.2));
+  }
+  .kolpak-voice-picker button[aria-current='true'] {
+    background: var(--kolpak-paper, var(--sable-sec-main));
+    color: var(--kolpak-ink, var(--sable-sec-on-main));
+    font-weight: 700;
+  }
+  .kolpak-voice-picker__name {
+    flex: 1 1 auto;
+    min-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+
+  /* Chat column: 320px, panel ground, compact lines. */
+  .kolpak-theater-chat {
+    display: flex;
+    flex-direction: column;
+    min-width: 0;
+    min-height: 0;
+    background: var(--kolpak-panel, var(--sable-bg-container));
+  }
+  .kolpak-theater-chat__head {
+    flex: none;
+    height: 52px;
+    box-sizing: border-box;
+    padding: 0 16px;
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    border-bottom: 2px solid var(--kolpak-black, var(--sable-bg-container-line));
+  }
+  .kolpak-theater-chat__title {
+    margin: 0;
+    min-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    font-family: var(--kolpak-font-head, inherit);
+    font-size: 20px;
+    font-weight: 700;
+    font-synthesis: none;
+    letter-spacing: 0.03em;
+    text-transform: uppercase;
+  }
+  .kolpak-theater-chat__switch {
+    appearance: none;
+    flex: none;
+    margin: 0 0 0 auto;
+    width: 32px;
+    height: 32px;
+    padding: 0;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    border: 0;
+    background: none;
+    color: var(--kolpak-muted, inherit);
+    cursor: pointer;
+  }
+  .kolpak-theater-chat__switch svg {
+    fill: none;
+    stroke: currentColor;
+    stroke-width: 2;
+    stroke-linejoin: miter;
+  }
+  .kolpak-theater-chat__switch:hover,
+  .kolpak-theater-chat__switch[aria-expanded='true'] {
+    color: var(--kolpak-paper, inherit);
+  }
+
+  .kolpak-theater-chat__lines,
+  .kolpak-theater-chat__rooms {
+    flex: 1 1 auto;
+    min-height: 0;
+    margin: 0;
+    padding: 14px 16px;
+    list-style: none;
+    overflow-y: auto;
+    font-size: 13px;
+    line-height: 1.45;
+  }
+  .kolpak-theater-chat__lines {
+    display: flex;
+    flex-direction: column;
+    gap: 9px;
+  }
+  .kolpak-theater-chat__lines li {
+    overflow-wrap: anywhere;
+    white-space: pre-wrap;
+  }
+  .kolpak-theater-chat__time,
+  .kolpak-theater-chat__muted,
+  .kolpak-theater-chat__empty {
+    color: var(--kolpak-muted, inherit);
+  }
+  .kolpak-theater-chat__name {
+    font-weight: 700;
+  }
+  .kolpak-theater-chat__name[data-colour='talking'] {
+    color: var(--kolpak-green, var(--sable-success-main));
+  }
+  .kolpak-theater-chat__name[data-colour='streamer'] {
+    color: var(--kolpak-orange, var(--sable-primary-main));
+  }
+
+  .kolpak-theater-chat__rooms li button {
+    appearance: none;
+    display: block;
+    width: 100%;
+    margin: 0;
+    padding: 5px 8px;
+    border: 0;
+    background: none;
+    color: inherit;
+    font: inherit;
+    text-align: left;
+    cursor: pointer;
+  }
+  .kolpak-theater-chat__rooms li button:hover {
+    background: var(--kolpak-panel-hover, rgba(127, 127, 127, 0.2));
+  }
+  .kolpak-theater-chat__rooms li button[aria-current='true'] {
+    background: var(--kolpak-paper, var(--sable-sec-main));
+    color: var(--kolpak-ink, var(--sable-sec-on-main));
+    font-weight: 700;
+  }
+
+  /* Images sit under their line, no wider than the column. */
+  .kolpak-theater-chat__image {
+    margin-top: 6px;
+    max-width: 100%;
+  }
+
+  /* The composer is one outlined box: the text field and the attach button inside it. */
+  .kolpak-theater-chat__composer {
+    flex: none;
+    margin: 0 16px 14px;
+    display: flex;
+    align-items: center;
+    border: 2px solid var(--kolpak-line, currentColor);
+  }
+  .kolpak-theater-chat__composer:focus-within {
+    border-color: var(--kolpak-paper, currentColor);
+  }
+  .kolpak-theater-chat__attach {
+    appearance: none;
+    flex: none;
+    width: 32px;
+    height: 32px;
+    margin: 0 4px 0 0;
+    padding: 0;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    border: 0;
+    background: none;
+    color: var(--kolpak-muted, inherit);
+    cursor: pointer;
+  }
+  .kolpak-theater-chat__attach svg {
+    fill: none;
+    stroke: currentColor;
+    stroke-width: 2;
+    stroke-linejoin: miter;
+  }
+  .kolpak-theater-chat__attach:hover:not(:disabled) {
+    color: var(--kolpak-paper, inherit);
+  }
+  .kolpak-theater-chat__composer input[type='text'] {
+    flex: 1 1 auto;
+    min-width: 0;
+    box-sizing: border-box;
+    width: 100%;
+    margin: 0;
+    padding: 10px 12px;
+    border: 0;
+    background: transparent;
+    color: var(--kolpak-paper, inherit);
+    caret-color: var(--kolpak-orange, currentColor);
+    font: inherit;
+    font-size: 13px;
+    outline: none;
+  }
+  .kolpak-theater-chat__composer input::placeholder {
+    color: var(--kolpak-muted, inherit);
+  }
+  .kolpak-theater-chat__error {
+    margin: -8px 16px 12px;
+    color: var(--kolpak-orange, inherit);
+    font-size: 12px;
+  }
+}

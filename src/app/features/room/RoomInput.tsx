@@ -2010,7 +2010,8 @@ export const RoomInput = forwardRef<HTMLDivElement, RoomInputProps>(
         <CustomEditor
           editableName="RoomInput"
           editor={editor}
-          placeholder="Send a message..."
+          className="kolpak-composer"
+          placeholder={`message ${(room?.name || 'room').toLowerCase()}`}
           enterKeyHint={enterForNewline ? 'enter' : 'send'}
           suppressBlurRefocusRef={suppressBlurRefocusRef}
           onKeyDown={handleKeyDown}

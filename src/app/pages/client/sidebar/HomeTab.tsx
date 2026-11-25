@@ -13,7 +13,7 @@ import { SidebarTab } from '$components/sidebar';
 import { useHomeSelected } from '$hooks/router/useRouteSelected';
 import { ScreenSize, useScreenSizeContext } from '$hooks/useScreenSize';
 import { useNavToActivePathAtom } from '$state/hooks/navToActivePath';
-import { House, getPhosphorIconSize } from '$components/icons/phosphor';
+import LogoSVG from '$public/res/svg/logo.svg';
 import { useMenuAnchor } from '$hooks/useMenuAnchor';
 import { NavMenu } from '$components/nav/NavMenu';
 import { useHomeRooms } from '$pages/client/home/useHomeRooms';
@@ -53,9 +53,7 @@ export function HomeTab() {
 
   return (
     <SidebarTab
-      icon={
-        <House size={getPhosphorIconSize('toolbar')} weight={homeSelected ? 'fill' : 'regular'} />
-      }
+      icon={<img className="kolpak-home-icon" src={LogoSVG} alt="" aria-hidden="true" />}
       selected={homeSelected}
       tooltip="Home"
       onClick={handleHomeClick}

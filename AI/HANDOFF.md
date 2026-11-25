@@ -249,6 +249,147 @@ New hooks in Sable's files: `data-kolpak-row`, `data-muted`, `data-collapsed` an
 
 Still open in the room list: the box on space lists; the four Home actions (Create Room and so on) that the mockup does not show; PEOPLE rows with the presence square instead of avatars; the own-avatar footer with a 2px rule; column width 222px.
 
+### 2026-11-25 — check against the design canvas, and the stream player
+
+**Design check.** Compared the running app with the "The client" artboard of the design canvas and fixed what differed most:
+
+- Room header: 46px, 24px room avatar, name and topic on one line (hooks `kolpak-room-header` and `kolpak-room-header__titles` in `RoomViewHeader.tsx`).
+- Composer: an outlined box with no fill, placeholder "message <room>", orange caret (class `kolpak-composer` and the placeholder in `RoomInput.tsx`).
+- Home tab: the Guy on a paper square with 9px corners instead of a house icon (`HomeTab.tsx`).
+- Voice tree at 13px with 1px guides per level; status bar latency as "32ms".
+- The dock is open by default; closing it still persists.
+- 24-hour clock is the default for new installs (`config.json` → `settingsDefaults.hour24Clock`). Existing installs keep the stored setting; this machine still shows 12-hour times until it is switched in Settings → General.
+
+Left different on purpose, for the owner to decide:
+
+- **Name colours.** The mockup shows plain names; the app keeps the colours people pick for themselves in Sable (profile colours and power-level tag colours). Turning them off removes a feature the community may use.
+- **Timestamp position.** Sable's layout puts the time at the right edge; the mockup has it after the name. Changing it means editing Sable's message layout.
+- **The four Home actions** (Create Room, Join with Address, Explore Spaces, Message Search) above ROOMS are not in the mockup; they are kept because they are the only way to those functions from the list.
+- **Room-list footer.** Sable's own (avatar and three buttons) instead of the mockup's name and "on air" state line.
+
+**Stream player** (`src/kolpak/streams/StreamDock.tsx`, `player.ts`, `streamStore.ts`). The stream half of the live dock: ON AIR (or OFF AIR) tag, a channel picker that reads as the bold channel name, a 16:9 black picture with a 2px orange frame while live, and viewers · uptime · bitrate · streamer under it. FLV is played with mpegts.js (the service's FLV comes over `wss://`), HLS with hls.js or natively on macOS and iOS; each library is loaded only when first used. mpegts.js is set to chase the live edge (at most 3 s behind). Nothing plays until the picture is clicked; volume is remembered. Clicking a live channel in the status bar picks it and opens the dock. The dock's channel defaults to the busiest live one and remembers the user's pick.
+
+Verified in the app against the live service: channel `stream` played at 1920×1080 within about 3 seconds of the click, stats filled in. Then paused again.
+
+Not built yet: theater mode (the same player, big, with chat beside it), the format switch, DASH, picture-in-picture beyond what the native controls offer, and the ON AIR row in the timeline.
+
+### 2026-11-25 — theater mode
+
+Built against the "Theater mode" artboard (DESIGN §4). WATCH in the dock (or the dock's player) opens it; EXIT THEATER closes it.
+
+- **Layout** (`src/kolpak/theater/Theater.tsx`, mounted from `ClientLayout.tsx`): the space rail and the status bar stay; the room list, the room and the dock give way to the stream column and a 320px chat column. The routes stay mounted, only hidden, so the room and its scroll position are as they were on the way back.
+- **Header** (52px): ON AIR / OFF AIR, the streamer in Anton 22, viewers · uptime · bitrate, a FLV / HLS / DASH switch (the active one a paper block; formats the channel does not offer are greyed; DASH is always greyed because it is not played), EXIT THEATER.
+- **Picture** fills the column, no frame. **Channels** as chips: live with the orange dot and viewers, the selected one a paper block, offline muted "name --". **Voice line** (`theater/VoiceStrip.tsx`), one 48px row: "in voice" with a green square on the left; on the right the channel you are in as a button, then the mic and deafen buttons at 32px (`VoiceButtons size="small"`). The channel button opens the channel list upwards (indented by depth, user counts, yours inverted); picking one moves you there, Escape or a click elsewhere closes it. No list of people: the dock has the full tree. When not in voice: "not in voice" and JOIN VOICE. If the server refuses a move (a channel you may not enter), its reason shows in orange on the line for 5 s.
+- **One player** (`src/kolpak/streams/sharedPlayer.ts`): a single `<video>` that both the dock and theater host. Switching views moves the element instead of reloading; checked live, playback carried on from 14.6 s to 16.1 s across the switch, same element. When no view hosts it any more (the dock closed), playback stops. Picking another channel or format while something plays switches to it; a channel going off air stops it.
+- **Chat column** (`TheaterChat.tsx`): not Sable's timeline but a compact view of one room, `HH:MM name text` at 13px, names green while that person talks in voice and orange for the streamer, images and files as `[image]` / `[file]`, replies without their quoted fallback, a plain text composer. It starts on the room that was open and has a switch-room list. Checked live: 21 lines of the test room shown, Cyrillic intact.
+
+**Images in the theater chat** (asked for by the owner): images show under their line through Sable's own image component, so encrypted and authenticated media, spoilers and the full-size viewer behave as in the timeline (checked live: five images in the test room loaded). Images are posted with the attach button, by pasting, or by dropping onto the message field; `chatImages.ts` uses Sable's encrypt, upload and image-message helpers, so posts carry size, blurhash and a thumbnail like posts from the main composer. Posting was not tried live, to keep test images out of the community room.
+
+Not done from the design: the hamburger at the bottom of the space rail that brings back the room list (that needs a button in Sable's rail), "general 3 unread" in the status bar, GIF and emoji pickers in the theater composer, the ON AIR row in the timeline, and which Matrix room belongs to which stream (theater uses the open room; SPEC §4 has the open question). Sending from the theater composer was not tried, so as not to post into the community room.
+
+### 2026-11-25 — "дать пососать" in the message menu
+
+Asked for by the owner: the menu on someone else's message (Sable's message options menu, so the desktop pop-out and the mobile sheet alike) has "дать пососать", placed after "Reply in Thread". It sends what typing `/me дал пососать <name>` would: an `m.emote` whose name is a real mention (a `matrix.to` link in `formatted_body` and `m.mentions.user_ids`), so it shows as a pill and pings them. The name is the room display name, else the ID's local part, HTML-escaped in the formatted body. A message in a thread gets its reply in that thread. Hidden on our own messages, redacted ones, and in rooms we may not post in; a failed send keeps the menu open with "не отправилось. ещё раз?".
+
+Code: `src/kolpak/chat/givePososat.ts` (content, the check, the send) and `PososatItem.tsx`; Sable's `Options.tsx` gains one import and one line. Tests: content shape, escaping, naming, when it is offered. Checked live by the owner, who sent two from the running app; they render as emotes with a mention pill.
+
+## Spike 2 log (Mumble)
+
+### 2026-11-25 — control connection, channel tree, dock, settings
+
+This entry is the control channel only; sending voice came later the same day, see the next entry.
+
+**Crate.** `crates/kolpak-mumble`, a standalone Rust crate with no Tauri in it: prost message structs written by hand against upstream `Mumble.proto` (no `protoc` at build time), framing, the server state model, TLS, and an async client that emits events. 19 unit tests, including a whole session against an in-memory server; clippy clean with warnings as errors. Build and test it alone with `CARGO_TARGET_DIR=src-tauri/target/kolpak-mumble cargo test` from the crate folder (the shared target dir keeps build output away from Vite's watcher). `cargo run --example tree -- <host>` prints a server's channel tree.
+
+**Server facts** (`mumble.klpq.io:64738`, probed and then connected to): version 1.5.634 on Linux; self-signed "Murmur Autogenerated Certificate v2" over TLS 1.3; no server password; no client certificate required, so we join as an unregistered user; bandwidth cap 558 kbit/s; 12 channels. Control-channel ping measured at 32–37 ms.
+
+**TLS.** The server's certificate cannot pass a web-PKI check, so the client pins it: the SHA-256 fingerprint is reported on first connect, stored (currently in `localStorage`, key `kolpak:mumble:pin:<host>:<port>`), and required to match afterwards; a changed certificate is a hard error with both fingerprints in the message. The handshake signature is still verified. Moving the pin to OS secure storage and showing a first-use prompt are still to do (SPEC §5.1).
+
+**Bridge.** `src-tauri/src/mumble.rs` (desktop only) with commands `mumble_connect`, `mumble_disconnect`, `mumble_join_channel`, `mumble_set_self`, `mumble_get_state` and events `mumble://state`, `mumble://snapshot`, `mumble://stats`, `mumble://text`. Differences from the SPEC §5.5 sketch, now reflected there: one `mumble://snapshot` event with the whole tree instead of separate channel and user events with diffs (the tree is a dozen channels), and `mumble_get_state` so a reloaded webview can catch up. The typegen plugin maps the crate's snapshot type through `MumbleSnapshot` in `tauri.conf.json`.
+
+**Frontend** (`src/kolpak/voice`): an event-fed store outside React and outside the Matrix stores; the VOICE half of the live dock (DESIGN §3.4) with the channel tree as a foldable outline, click a channel to move there, current channel as the inverted block, users under their channel with "(muted)" / "(deafened)", mic and deafen buttons, LEAVE; the status bar's voice entry shows channel, head count and ping and toggles the dock (open state persists). Mute and deafen follow Mumble's rules (deafening mutes, unmuting undeafens) and the buttons show what the server echoes back, never a local guess.
+
+**Settings → Voice** (`VoiceSettingsPage.tsx`, registered as a new settings section, desktop app only): server, port, name (default: the Matrix localpart), join on startup, transmit mode (push to talk / voice activity / always on) and a push-to-talk key captured by pressing it. Stored per device in `localStorage` under `kolpak:voice:settings`, not in Sable's synced settings. **The transmit mode and the push-to-talk key are saved but do nothing yet**: there is no audio, and the key is not registered as a global hotkey. The page says so.
+
+Checked live against the community server from the running app: join, the tree, moving between channels, mute, deafen, unmute-while-deafened, leave, and the certificate pin. We join muted and deafened because nothing is sent or played; the user can switch the icons off, which changes what others see but still sends and plays nothing.
+
+A trap hit on the way: `VoiceSettings.tsx` next to `voiceSettings.ts` differ only in case, which TypeScript rejects and which blanked the running app through a failed hot reload. The page file is `VoiceSettingsPage.tsx`.
+
+Next for Spike 2: UDP voice channel with the 1.5 protobuf packet format and OCB2-AES128, then receive (jitter buffer, Opus decode, playback via `cpal`), then capture and transmit, which is where the transmit mode and a global push-to-talk hotkey get wired in. Talking indicators (green names) arrive with receive.
+
+### 2026-11-25 — sending voice, audio settings
+
+The owner asked for working mute and deafen, then for audio settings and real transmission. Both are in. **Receiving and playing voice is still not built.**
+
+**How voice is sent.** Microphone (`cpal`) → mono → 48 kHz → 20 ms frames → transmit gate → Opus at 40 kbit/s → a 1.5-format voice packet (one header byte `0`, then the protobuf `Audio` message with `target = 0`, a frame number counted in 10 ms units, and `is_terminator` on the last frame of a stretch) → wrapped in a `UDPTunnel` control message on the existing TLS connection. Tunnelling through TCP is the fallback path the protocol provides for clients whose UDP is blocked; using it first avoided building the OCB2-encrypted UDP channel before anything could be heard. The UDP channel is still wanted for latency and is the next transport step. Packet format checked against upstream `MumbleUDP.proto` and `MumbleProtocol.cpp`.
+
+**Opus without a C toolchain.** This machine has no `cmake`, which the usual `opus` crate needs to build libopus. The crate uses `unsafe-libopus` 0.2 instead, libopus machine-translated to Rust: nothing to install, and nothing extra to cross-compile for Android and iOS later. It was last released in 2024; if that becomes a problem, `opus` 0.4 (needs cmake) and `ropus` are the alternatives looked at.
+
+**In the crate** (`crates/kolpak-mumble`, feature `audio`, on by default): `voice.rs` (packets), `gate.rs` (push to talk, voice activity with a 300 ms hangover, always on; pure logic), `audio.rs` (device list, capture thread, resampler, encoder, `pump_voice`). 34 tests, clippy clean. `cargo run --example talk -- <host> [seconds]` sends the microphone for a few seconds; `-- devices` lists inputs. The resampler is linear interpolation, used only when the device is not already at 48 kHz.
+
+**In the app.** The microphone opens when the server lets us in and closes on disconnect. It is gated by what the server says about us (self-mute, self-deafen, admin mute, suppression), by the transmit mode, and in push-to-talk mode by the key. New commands `mumble_set_transmit`, `mumble_ptt`, `audio_list_input_devices`; new events `audio://levels` and `audio://capture`. Mute and deafen follow Mumble's rules (deafening mutes, unmuting undeafens) and the UI shows the server's echo.
+
+**Settings → Voice** now also has: microphone picker, a live input level meter that turns green while being sent, and a voice-activity threshold slider with its mark on the meter. Transmit mode and the push-to-talk key now take effect.
+
+Verified live from the app against the community server: join, microphone opens, mute, deafen, unmute, the talking light while sending and off when muted, switching modes. Verified from the CLI: 200 frames in 4 s accepted by the server.
+
+**Not verified: that anyone heard it.** Both tests ran in the empty Root channel, and the default input here (a SteelSeries Sonar virtual microphone) read as silence, level 0.000. A person in the channel, or the bot that transcribes Mumble into the Matrix room, has to confirm audible speech. If the level meter stays flat, pick the real microphone in Settings → Voice.
+
+**Limits to know about:**
+
+- **Push to talk only works while a Kolpak window has focus.** It is a key listener in the webview, not a system-wide hotkey. The global-shortcut plugin is in the app but not wired to this.
+- **We still join muted and deafened**, because nothing is played back. Unmuting undeafens, which shows others a "hearing" icon although we cannot hear.
+- No noise suppression, echo cancellation or automatic gain yet (SPEC §5.3).
+- The certificate pin and the voice settings are in `localStorage`, not OS secure storage.
+
+Next for Spike 2: receive and play (decode, jitter buffer, mix, output device), talking indicators for others, then the UDP channel and a global push-to-talk hotkey.
+
+### 2026-11-25 — hearing others, the UDP channel, and the limits list
+
+The owner asked for receive, then for "all limits" from the previous entry to be fixed. Four of the five are done; echo cancellation is not.
+
+**Receive and playback** (`crates/kolpak-mumble/src/playback.rs`). The connection hands incoming voice packets to the caller on a separate unbounded channel, so a slow consumer cannot stall control traffic. Each speaker gets an Opus decoder and a buffer with a fixed 60 ms cushion before it starts playing and a 400 ms cap so delay cannot build up; a mixer sums the speakers, applies the output volume and clamps; a `cpal` output stream plays it, resampling when the device is not at 48 kHz. Deliberately simple: no adaptive jitter buffer, no loss concealment. Talking state comes from packets and the terminator flag, with a 350 ms timeout.
+
+**We now join hearing, with the microphone closed** (`join_muted`), instead of muted and deafened. Deafening stops playback and drops incoming packets.
+
+**UDP voice channel** (`crypt.rs`, `udp.rs`). OCB2 with AES-128, written against upstream's `CryptStateOCB2.cpp` including its replay window, late and lost accounting and both XEX* mitigations; it passes the two reference vectors and the every-length round trip from upstream's `TestCrypt.cpp`. The client pings over UDP every 5 s; while replies arrive, voice goes over UDP, and after 12 s without one it falls back to the tunnel through the control connection. The server's nonce resync requests are answered. A socket error on the UDP side never drops the connection.
+
+**Noise suppression.** RNNoise through `nnnoiseless` (pure Rust) on the microphone, before the level meter and the gate, so steady room noise does not hold voice activity open. On by default, with a switch in Settings → Voice.
+
+**System-wide push to talk, Windows only.** A registered global hotkey would swallow the key in every other app, so instead the native side reads the key's state (`GetAsyncKeyState`) every 10 ms while in push-to-talk mode. It works from any app and leaves the key alone. On other platforms there is no implementation and the webview's focused-window listener is still the only source; under Wayland this will need the portal.
+
+**Settings → Voice** gained: output device, output volume (0–200%), output level meter, the noise suppression switch, and a line saying which path voice is using. People who are speaking are green in the dock's tree.
+
+**Verified against the community server:**
+
+- Two CLI clients in the Root channel: one sent 299 frames, the other received 299 voice packets, all decoded, attributed to the right sender, with the listener reporting the UDP transport. This also closes the earlier gap: sent voice does reach other clients.
+- In the app: join hearing with the microphone closed, both devices open, voice path UDP.
+- 57 crate tests, 5 bridge tests, the frontend suites, clippy with warnings as errors, typecheck: all pass.
+
+**Not verified:** anyone speaking and being heard through the speakers in the app. During every observation window the people in the channel happened to be silent, and the default microphone here read as silence. The decode path is covered by a test that runs real Opus packets through the mixer.
+
+**Still open:**
+
+- **Echo cancellation.** Not built. It needs the played signal as a reference for the capture path and a real AEC implementation; none of the pure-Rust options was evaluated. Headset users do not need it; speaker users will echo.
+- Automatic gain control.
+- Adaptive jitter buffer and packet-loss concealment.
+- Push to talk system-wide on macOS and Linux.
+- ~~Per-user volume and local mute.~~ Done, see the next entry.
+- The certificate pin and the voice settings are still in `localStorage`.
+
+### 2026-11-25 — per-person volume and "mute for me"
+
+Click someone else's name in the dock's voice tree: a panel opens on its own line under them (the full width of the tree, not indented, so it fits at any depth) with a volume slider, 0–200% in 5% steps, MUTE FOR ME and RESET. Only what this app plays changes; nothing goes to the server. Rows show what was set: "40%", or the name struck through with "off". Escape, a click elsewhere, or the name again closes it.
+
+- **Stored by Mumble name**, compared without case (`src/kolpak/voice/peopleSettings.ts`, localStorage `kolpak:voice:people`), so it survives reconnects; sessions change every time. Entries back at 100% and unmuted are forgotten.
+- **Applied in the native mixer** (`Mixer::set_session_gains` in `playback.rs`): a gain per session, 0 for muted. A muted speaker's buffer still drains, so unmuting resumes live instead of late. The bridge keeps the set (`mumble_set_user_gains`) and gives it to every new mixer; a new connection clears it.
+- **Resent from the voice store** whenever the people on the server or the settings change, never at the level meters' rate. Each change is logged as `mumble: per-person volume [session=gain, …]`.
+- The slider is styled as the house slider (`.kolpak-range`: a 2px line, paper up to the knob, square knob) for reuse elsewhere.
+
+Checked live: joining voice sent the saved 40% for one person by their new session; MUTE FOR ME sent 0; RESET emptied the set. The first version of the panel sat inside the indented row and pushed the tree sideways (the owner caught it); now it measures exactly the tree's width. Not heard by ear: nobody was speaking during the check. Mixer tests cover the gain, the clamp, draining while muted and forgetting people who leave.
+
+A testing trap: `window.__TAURI_INTERNALS__.invoke` is read-only, so wrapping it to record IPC calls silently does nothing. Use the log line instead.
+
 ## Starting a new Claude session on this
 
 Open the session in a local clone of this repo and say something like:

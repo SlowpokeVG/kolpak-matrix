@@ -1,0 +1,198 @@
+/*
+ * The stream half of the live dock (AI/DESIGN.md §3.4). Layered like the other Kolpak
+ * components; see ../layout/status-bar.css for why Sable's layers are named first.
+ */
+@layer sable-reset, folds, reset, tokens, base, components, theme, user;
+
+@layer components {
+  .kolpak-stream {
+    flex: none;
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+  }
+
+  .kolpak-stream__head {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 10px;
+    min-width: 0;
+  }
+
+  /* ON AIR tag (§5): orange block, ink bold mono, 8px ink dot. */
+  .kolpak-onair {
+    flex: none;
+    display: inline-flex;
+    align-items: center;
+    gap: 8px;
+    padding: 3px 10px;
+    background: var(--kolpak-orange, var(--sable-primary-main));
+    color: var(--kolpak-ink, var(--sable-primary-on-main));
+    font-weight: 700;
+    font-size: 13px;
+  }
+  .kolpak-onair__dot {
+    width: 8px;
+    height: 8px;
+    border-radius: 50%;
+    background: currentColor;
+  }
+
+  .kolpak-stream__offair {
+    flex: none;
+    padding: 3px 10px;
+    border: 2px solid var(--kolpak-line, currentColor);
+    color: var(--kolpak-muted, inherit);
+    font-weight: 700;
+    font-size: 13px;
+  }
+
+  .kolpak-stream__name {
+    font-weight: 700;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+
+  /* The channel picker reads as the bold streamer name; it is still a real select. */
+  .kolpak-stream__channel {
+    appearance: none;
+    min-width: 0;
+    max-width: 60%;
+    margin: 0;
+    padding: 0 0 0 4px;
+    border: 0;
+    background: transparent;
+    color: inherit;
+    font: inherit;
+    font-weight: 700;
+    text-align: right;
+    text-overflow: ellipsis;
+    cursor: pointer;
+  }
+  .kolpak-stream__channel:hover {
+    text-decoration: underline;
+  }
+  .kolpak-stream__channel option {
+    background: var(--kolpak-panel, var(--sable-bg-container));
+    color: var(--kolpak-paper, var(--sable-bg-on-container));
+    font-weight: 400;
+  }
+
+  /* 16:9 black picture, a 2px orange frame while live. */
+  .kolpak-stream__picture {
+    position: relative;
+    aspect-ratio: 16 / 9;
+    background: #000000;
+    border: 2px solid var(--kolpak-line, transparent);
+    box-sizing: border-box;
+    overflow: hidden;
+  }
+  .kolpak-stream__picture[data-live='true'] {
+    border-color: var(--kolpak-orange, var(--sable-primary-main));
+  }
+
+  /* The shared video lives in this host and moves between dock and theater. */
+  .kolpak-stream__host {
+    position: absolute;
+    inset: 0;
+  }
+  .kolpak-stream__video {
+    display: block;
+    width: 100%;
+    height: 100%;
+    object-fit: contain;
+    background: #000000;
+  }
+  .kolpak-stream__picture[data-status='idle'] .kolpak-stream__video {
+    visibility: hidden;
+  }
+
+  .kolpak-stream__play {
+    appearance: none;
+    position: absolute;
+    inset: 0;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    margin: 0;
+    padding: 0;
+    border: 0;
+    background: transparent;
+    color: var(--kolpak-paper, #ffffff);
+    cursor: pointer;
+  }
+  .kolpak-stream__play:disabled {
+    cursor: default;
+  }
+  .kolpak-stream__play svg {
+    fill: currentColor;
+  }
+  .kolpak-stream__play:hover:not(:disabled) svg {
+    fill: var(--kolpak-orange, currentColor);
+  }
+
+  .kolpak-stream__overlay {
+    appearance: none;
+    position: absolute;
+    inset: auto 0 0 0;
+    margin: 0;
+    padding: 4px 8px;
+    border: 0;
+    background: var(--kolpak-black, #000000);
+    color: var(--kolpak-muted, #aaaaaa);
+    font: inherit;
+    font-size: 12px;
+    text-align: left;
+  }
+  button.kolpak-stream__overlay {
+    cursor: pointer;
+  }
+
+  .kolpak-stream__note {
+    color: var(--kolpak-muted, inherit);
+    font-size: 13px;
+  }
+
+  /* viewers · uptime · bitrate, muted 13px. */
+  .kolpak-stream__stats {
+    display: flex;
+    gap: 18px;
+    min-width: 0;
+    color: var(--kolpak-muted, inherit);
+    font-size: 13px;
+    font-variant-numeric: tabular-nums;
+    white-space: nowrap;
+  }
+  /* WATCH opens theater mode: orange Anton, like the ON AIR row in the timeline. */
+  .kolpak-stream__watch {
+    appearance: none;
+    margin: 0 0 0 auto;
+    padding: 0;
+    border: 0;
+    background: none;
+    color: var(--kolpak-orange, var(--sable-primary-main));
+    font-family: var(--kolpak-font-head, inherit);
+    font-size: 15px;
+    font-weight: 700;
+    font-synthesis: none;
+    letter-spacing: 0.04em;
+    cursor: pointer;
+  }
+  .kolpak-stream__watch:hover:not(:disabled) {
+    text-decoration: underline;
+  }
+  .kolpak-stream__watch:disabled {
+    cursor: default;
+    color: var(--kolpak-muted, inherit);
+  }
+
+  /* The 2px rule between the stream and the voice tree. */
+  .kolpak-dock__rule {
+    flex: none;
+    height: 2px;
+    margin-top: 6px;
+    background: var(--kolpak-line, currentColor);
+  }
+}

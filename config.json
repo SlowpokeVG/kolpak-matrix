@@ -19,12 +19,17 @@
   },
 
   "streamStatsUrl": "https://stats-api.klpq.io/v1",
+  "mumble": {
+    "host": "mumble.klpq.io",
+    "port": 64738
+  },
 
   "settingsDefaults": {
     "useSystemTheme": false,
     "themeId": "kolpak-theme",
     "darkThemeId": "kolpak-theme",
-    "showUnreadCounts": true
+    "showUnreadCounts": true,
+    "hour24Clock": true
   },
 
   "hashRouter": {

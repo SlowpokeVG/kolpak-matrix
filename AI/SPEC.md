@@ -115,32 +115,47 @@ Receive → decrypt → per-user jitter buffer → Opus decode (with PLC/FEC) �
 
 ### 5.5 Bridge API (Tauri)
 
-Commands (webview → Rust):
+Commands (webview → Rust). Built (control channel and sending voice, 2026-11-25):
 
 ```
-mumble_connect({ host, port, username, password? })
+mumble_connect({ args: { host, port?, username, password?, pinnedFingerprint? } })
+    → { fingerprint, pinned }
 mumble_disconnect()
 mumble_join_channel({ channelId })
-mumble_set_self({ mute?, deafen? })
+mumble_set_self({ mute?, deaf? })
+mumble_set_user_gains({ gains: [{ session, gain }] })   // per-person volume, 0 = muted for us; replaces the set
+mumble_set_transmit({ args: { mode: "ptt" | "vad" | "continuous", vadThreshold?, inputDevice?,
+                              pttKey?, noiseSuppression? } })
+mumble_set_output({ args: { outputDevice?, volume? } })
+mumble_ptt({ down })                            // ignored where the key is read natively (Windows)
+audio_list_input_devices() / audio_list_output_devices() → [{ id, name, isDefault }]
+mumble_get_state() → { state, snapshot, pingMs?, capture, udp }   // for a webview that just loaded
+```
+
+Still to come:
+
+```
 mumble_set_user_volume({ session, gain })      // local only
 mumble_set_user_local_mute({ session, muted })
-mumble_set_transmit({ mode: "vad" | "ptt" | "continuous", vadThreshold? })
-mumble_ptt({ down })
-audio_list_devices() / audio_set_devices({ input?, output? })
-audio_set_volumes({ input?, output? })
 ```
 
-Events (Rust → webview):
+Events (Rust → webview). Built:
 
 ```
-mumble://state        { status: "disconnected"|"connecting"|"connected"|"reconnecting", error? }
-mumble://channels     { channels: [{ id, parent, name, position }] }   // full, then diffs
-mumble://users        { users: [{ session, name, channelId, mute, deaf, selfMute, selfDeaf }] }
-mumble://talking      { session, talking }
-mumble://stats        { pingMs, udp: boolean, loss }
-mumble://text         { from, channelId?, message }
-audio://levels        { input }                                          // ≤20 Hz, only while settings open
+mumble://state     { status: "disconnected"|"connecting"|"connected", session?, serverVersion?, error? }
+mumble://snapshot  { session, channels: [{ id, parent, name, position, temporary, maxUsers }],
+                     users: [{ session, name, channelId, mute, deaf, suppress, selfMute, selfDeaf,
+                              registered, prioritySpeaker, recording }] }   // the whole tree, on every change
+mumble://stats     { pingMs }
+mumble://text      { actor?, message }
+mumble://talking   { sessions }                 // everyone else who is speaking, when it changes
+mumble://transport { udp }                      // voice switched between UDP and the tunnel
+mumble://denied    { reason }                   // the server refused something (a move); reason is a sentence
+audio://levels     { input, output, transmitting }   // about 10 Hz while connected, only when it changes
+audio://capture    { deviceName?, error?, outputDeviceName?, outputError? }
 ```
+
+Still to come: packet loss in `mumble://stats`.
 
 The frontend keeps a `voice` store fed only by these events; UI never calls into Mumble state synchronously.
 
@@ -157,7 +172,7 @@ Facts, read on 2026-11-25 from the station site's source (`klpq/klpq-angular`, a
 - **Channels are not a fixed list:** they come from the API; the default channel is `stream`.
 - The site has no licence file. Kolpak's `src/kolpak/streams` is written from the API's behaviour, not copied from it.
 
-Built so far: `src/kolpak/streams/stats.ts` (fetchers and pure logic) and `useStreamChannels.ts` (polling hook), feeding the status bar. No player yet.
+Built so far: `src/kolpak/streams/stats.ts` (fetchers, source picking, uptime), `useStreamChannels.ts` (polling, one query per channel shared by everything), `player.ts` (mpegts.js for FLV including over WebSocket, hls.js or native HLS), and `StreamDock.tsx` (the dock player). Verified playing the `stream` channel at 1080p. `sharedPlayer.ts` holds the one `<video>` that the dock and theater mode (`src/kolpak/theater/`) move between without reloading, as planned above. DASH is not built.
 
 Design:
 - `StreamProvider` interface: `listChannels()`, `status(channel) → { live, viewers?, startedAt?, bitrateKbps?, title? }`, `sources(channel) → [{ kind: "flv"|"hls"|"dash"|"webrtc", url }]`.

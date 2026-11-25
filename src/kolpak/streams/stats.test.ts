@@ -2,8 +2,12 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
 import {
   fetchChannelNames,
   fetchChannelStreams,
+  formatTape,
   orderChannels,
+  pickSource,
+  playableProtocols,
   toChannelStatus,
+  uptimeSeconds,
   type StatsStream,
 } from './stats';
 
@@ -41,6 +45,36 @@ describe('orderChannels', () => {
       { name: 'stream', live: true, viewers: 12 },
     ]);
     expect(ordered.map((channel) => channel.name)).toEqual(['stream', 'pyro', 'kino', 'rebel']);
+  });
+});
+
+describe('pickSource', () => {
+  const rtmp = stream({ protocol: 'rtmp', urls: { edge: 'rtmps://media.example/live/x' } });
+  const flv = stream({ protocol: 'flv', urls: { edge: 'wss://media.example/live/x.flv' } });
+  const hls = stream({ protocol: 'hls', urls: { edge: 'https://media.example/live/x.m3u8' } });
+
+  it('prefers FLV, then HLS, and never picks the RTMP ingest', () => {
+    expect(pickSource([rtmp, hls, flv])).toEqual({ protocol: 'flv', url: flv.urls!.edge });
+    expect(pickSource([rtmp, hls])).toEqual({ protocol: 'hls', url: hls.urls!.edge });
+    expect(pickSource([rtmp])).toBeUndefined();
+    expect(pickSource([stream({ protocol: 'flv' })])).toBeUndefined();
+  });
+
+  it('honours a preferred protocol when the channel has it', () => {
+    expect(pickSource([flv, hls], 'hls')?.protocol).toBe('hls');
+    expect(pickSource([flv], 'hls')?.protocol).toBe('flv');
+    expect(playableProtocols([rtmp, hls, flv])).toEqual(['flv', 'hls']);
+  });
+});
+
+describe('uptime', () => {
+  it('counts from the start time, falling back to the reported duration', () => {
+    const now = Date.parse('2026-11-25T12:00:00Z');
+    expect(uptimeSeconds(stream({ startTime: '2026-11-25T10:35:53Z' }), now)).toBe(5047);
+    expect(uptimeSeconds(stream({ duration: 42 }), now)).toBe(42);
+    expect(uptimeSeconds(undefined, now)).toBeUndefined();
+    expect(formatTape(5047)).toBe('01:24:07');
+    expect(formatTape(0)).toBe('00:00:00');
   });
 });
 
