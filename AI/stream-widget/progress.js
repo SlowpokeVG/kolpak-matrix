@@ -3,7 +3,7 @@
 //   state: "done" | "now" | "todo"
 //   part:  0..1, how far the "now" step is (optional)
 window.KOLPAK_PROGRESS = {
-  now: "CI: Kolpak builds on every push to main (Windows, Linux, macOS)",
+  now: "CI: every push to main builds and publishes a release with all installers",
   steps: [
     { name: "docs",    state: "done" },
     { name: "fork",    state: "now", part: 0.85 },
