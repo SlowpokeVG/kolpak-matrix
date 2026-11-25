@@ -276,3 +276,53 @@
 .kolpak-theme .kolpak-nav-category * {
   letter-spacing: 0.08em;
 }
+
+/*
+ * Room header (DESIGN §3.3): 46px, 24px room avatar, name and topic on one line.
+ * Hooks: .kolpak-room-header on the header, .kolpak-room-header__titles on the name/topic box.
+ */
+.kolpak-theme .kolpak-room-header {
+  height: 46px;
+  min-height: 46px;
+  border-bottom: 2px solid var(--kolpak-panel);
+}
+.kolpak-theme .kolpak-room-header [class*='Avatar'] {
+  width: 24px;
+  height: 24px;
+  min-width: 24px;
+}
+.kolpak-theme .kolpak-room-header__titles {
+  flex-direction: row;
+  align-items: baseline;
+  gap: 12px;
+  min-width: 0;
+}
+.kolpak-theme .kolpak-room-header__titles > :last-child:not(:first-child) {
+  font-size: 13px;
+  color: var(--kolpak-muted);
+  min-width: 0;
+}
+
+/* Composer (DESIGN §3.3): an outlined box, no fill; the caret is the orange underscore. */
+.kolpak-theme .kolpak-composer {
+  background: transparent;
+  border: 2px solid var(--kolpak-line);
+}
+.kolpak-theme .kolpak-composer [contenteditable='true'] {
+  caret-color: var(--kolpak-orange);
+}
+
+/* Home tab: the Guy on a paper rounded square (DESIGN §2.1), the one rounded corner. */
+.kolpak-theme .kolpak-home-icon {
+  display: block;
+  width: 100%;
+  height: 100%;
+  border-radius: 9px !important;
+}
+.kolpak-theme .kolpak-space-rail button:has(> .kolpak-home-icon) {
+  padding: 0;
+  overflow: hidden;
+  border: 0;
+  border-radius: 9px !important;
+  background: var(--kolpak-paper);
+}

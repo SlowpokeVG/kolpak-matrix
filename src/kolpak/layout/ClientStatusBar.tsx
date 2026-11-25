@@ -6,7 +6,8 @@ import { currentChannelSummary } from '../voice/types';
 import { useVoiceSettings } from '../voice/useVoiceSettings';
 import { useVoiceRuntime } from '../voice/useVoiceRuntime';
 import { connectVoice, useVoice } from '../voice/voiceStore';
-import { toggleDock } from './dockStore';
+import { selectStreamChannel } from '../streams/streamStore';
+import { setDockOpen, toggleDock } from './dockStore';
 import { StatusBar, type StatusBarStream, type StatusBarVoice } from './StatusBar';
 
 // "Join voice on startup" runs once per app start, not on every remount of the bar.
@@ -60,6 +61,14 @@ export function ClientStatusBar() {
       voiceError={voiceState.error}
       voiceTitle="show or hide voice"
       onVoiceClick={desktop ? toggleDock : undefined}
+      onStreamClick={
+        desktop
+          ? (name) => {
+              selectStreamChannel(name);
+              setDockOpen(true);
+            }
+          : undefined
+      }
     />
   );
 }

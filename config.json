@@ -28,7 +28,8 @@
     "useSystemTheme": false,
     "themeId": "kolpak-theme",
     "darkThemeId": "kolpak-theme",
-    "showUnreadCounts": true
+    "showUnreadCounts": true,
+    "hour24Clock": true
   },
 
   "hashRouter": {

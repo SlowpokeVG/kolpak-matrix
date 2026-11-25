@@ -1,19 +1,37 @@
 import { useCallback, useMemo, useState } from 'react';
 import { invoke } from '@tauri-apps/api/core';
 import { buildTreeRows } from './tree';
-import { selfAudioState, toggleSelfDeaf, toggleSelfMute, type SelfAudioState } from './types';
 import { useVoiceSettings } from './useVoiceSettings';
+import { VoiceButtons } from './VoiceButtons';
 import { connectVoice, disconnectVoice, useVoice } from './voiceStore';
 import './voice-dock.css';
 
 // The VOICE half of the live dock (AI/DESIGN.md §3.4): the Mumble channel tree as a text
 // outline, with join and leave. Click a channel's name to move there; click its marker to
-// fold it. The stream half of the dock is not built yet.
+// fold it. The stream half is ../streams/StreamDock.tsx.
 //
 // Your microphone is sent when the mic button is on and the transmit mode lets it
 // through. Whoever is speaking, you included, is shown in green. Deafening stops playback.
 
 const INDENT_PX = 17;
+
+// One 1px guide per level, drawn as background stripes so rows stay flat in the DOM.
+const guides = (depth: number) =>
+  depth === 0
+    ? undefined
+    : {
+        backgroundImage: Array.from(
+          { length: depth },
+          () =>
+            'linear-gradient(var(--kolpak-line, currentColor), var(--kolpak-line, currentColor))'
+        ).join(', '),
+        backgroundSize: Array.from({ length: depth }, () => '1px 100%').join(', '),
+        backgroundPosition: Array.from(
+          { length: depth },
+          (_, level) => `${level * INDENT_PX + 5}px 0`
+        ).join(', '),
+        backgroundRepeat: 'no-repeat',
+      };
 
 export function VoiceDock() {
   const voice = useVoice();
@@ -42,18 +60,13 @@ export function VoiceDock() {
     void invoke('mumble_join_channel', { channelId }).catch(() => undefined);
   }, []);
 
-  const self = useMemo(() => selfAudioState(voice.snapshot), [voice.snapshot]);
-  const setSelf = useCallback((next: SelfAudioState) => {
-    void invoke('mumble_set_self', next).catch(() => undefined);
-  }, []);
-
   const canConnect = Boolean(settings.host) && Boolean(settings.username);
   const join = useCallback(() => {
     void connectVoice({ host: settings.host, port: settings.port, username: settings.username });
   }, [settings.host, settings.port, settings.username]);
 
   return (
-    <aside className="kolpak-dock" aria-label="Voice">
+    <section className="kolpak-dock__voice" aria-label="Voice">
       <div className="kolpak-dock__label">Voice</div>
 
       {voice.status !== 'connected' && (
@@ -86,7 +99,7 @@ export function VoiceDock() {
                   key={`c${row.id}`}
                   className="kolpak-tree__row kolpak-tree__row--channel"
                   data-current={row.current ? 'true' : undefined}
-                  style={{ paddingLeft: row.depth * INDENT_PX }}
+                  style={{ paddingLeft: row.depth * INDENT_PX, ...guides(row.depth) }}
                 >
                   <button
                     type="button"
@@ -116,7 +129,7 @@ export function VoiceDock() {
                   data-state={row.state}
                   data-self={row.self ? 'true' : undefined}
                   data-talking={row.talking ? 'true' : undefined}
-                  style={{ paddingLeft: row.depth * INDENT_PX }}
+                  style={{ paddingLeft: row.depth * INDENT_PX, ...guides(row.depth) }}
                 >
                   <span className="kolpak-tree__user">
                     {row.name}
@@ -130,34 +143,7 @@ export function VoiceDock() {
           {voice.captureError && <p className="kolpak-dock__note">{voice.captureError}.</p>}
           {voice.outputError && <p className="kolpak-dock__note">{voice.outputError}.</p>}
           <div className="kolpak-dock__controls">
-            <button
-              type="button"
-              className="kolpak-dock__square kolpak-dock__mic"
-              disabled={!self}
-              aria-pressed={self ? !self.mute : false}
-              aria-label={self?.mute ? 'unmute microphone' : 'mute microphone'}
-              title={self?.mute ? 'muted. click to unmute' : 'microphone on. click to mute'}
-              onClick={() => self && setSelf(toggleSelfMute(self))}
-            >
-              <svg viewBox="0 0 20 20" width="20" height="20" aria-hidden="true">
-                <path d="M7 3h6v8H7zM4 9v2a6 6 0 0 0 12 0V9M10 17v2" />
-                {self?.mute !== false && <path d="M3 3l14 14" />}
-              </svg>
-            </button>
-            <button
-              type="button"
-              className="kolpak-dock__square kolpak-dock__deaf"
-              disabled={!self}
-              aria-pressed={self ? self.deaf : false}
-              aria-label={self?.deaf ? 'undeafen' : 'deafen'}
-              title={self?.deaf ? 'deafened. click to hear again' : 'click to deafen'}
-              onClick={() => self && setSelf(toggleSelfDeaf(self))}
-            >
-              <svg viewBox="0 0 20 20" width="20" height="20" aria-hidden="true">
-                <path d="M3 13V10a7 7 0 0 1 14 0v3M3 12h3v5H3zM14 12h3v5h-3z" />
-                {self?.deaf !== false && <path d="M3 3l14 14" />}
-              </svg>
-            </button>
+            <VoiceButtons />
             <button
               type="button"
               className="kolpak-dock__button kolpak-dock__leave"
@@ -168,6 +154,6 @@ export function VoiceDock() {
           </div>
         </>
       )}
-    </aside>
+    </section>
   );
 }

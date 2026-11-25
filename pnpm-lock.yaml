@@ -199,6 +199,9 @@ importers:
       folds:
         specifier: ^2.7.1
         version: 2.7.1(@vanilla-extract/css@1.21.2)(@vanilla-extract/recipes@0.5.7(@vanilla-extract/css@1.21.2))(classnames@2.5.1)(react-dom@19.2.8(react@19.2.8))(react@19.2.8)
+      hls.js:
+        specifier: ^1.7.4
+        version: 1.7.4
       html-dom-parser:
         specifier: ^8.0.1
         version: 8.0.2
@@ -247,6 +250,9 @@ importers:
       matrix-widget-api:
         specifier: ^1.18.0
         version: 1.18.0
+      mpegts.js:
+        specifier: ^1.8.2
+        version: 1.8.2
       nanoid:
         specifier: ^6.0.1
         version: 6.0.1
@@ -3510,6 +3516,9 @@ packages:
     resolution: {integrity: sha512-yPDz7wqpg1/mmHLmS3tcfTfbw5f1eryXvyghYBffGdERwe+mV7ZcWzTR8LR17Kvqt3qfPurjlonmnq3MKXIOXw==}
     engines: {node: '>= 0.4'}
 
+  es6-promise@4.2.8:
+    resolution: {integrity: sha512-HJDGx5daxeIvxdBxvG2cb9g4tEvwIk3i8+nhX0yGrYmZUzbkdg8QbDevheDB8gd0//uPj4c1EQua8Q+MViT0/w==}
+
   esbuild@0.28.1:
     resolution: {integrity: sha512-HrJrvZv5ayxBzPfwphOoNzkzOIIlifzk0KJrGK2c8R4+LKpMtpYLQeUdjnwjWv/LZlkH2laZk+4w78pi99D4Vw==}
     engines: {node: '>=18'}
@@ -3753,6 +3762,9 @@ packages:
   hasown@2.0.4:
     resolution: {integrity: sha512-T2UbfbBEF32wiepXIsMlTW9+dDYC6wMh/t/vYA4tuOMKqWz/n3vr1NFSxQiyP+zk2mXsoMA/i/7qV6LKut1t1A==}
     engines: {node: '>= 0.4'}
+
+  hls.js@1.7.4:
+    resolution: {integrity: sha512-3GlxGdPvT2YHvQYOt+yOzT/DEior/qJVNIylHA77kgeoBTdQQqi70GwefNEUmHQeNGyjC8U62+bruqW/Tpm+tg==}
 
   hoist-non-react-statics@3.3.2:
     resolution: {integrity: sha512-/gGivxi8JPKWNm/W0jSmzcMPpfpPLc3dY/6GxhX2hQ9iGj3aDfklV4ET7NjKpSinLpJ5vafa9iiGIEZg10SfBw==}
@@ -4291,6 +4303,10 @@ packages:
 
   modern-ahocorasick@1.1.0:
     resolution: {integrity: sha512-sEKPVl2rM+MNVkGQt3ChdmD8YsigmXdn5NifZn6jiwn9LRJpWm8F3guhaqrJT/JOat6pwpbXEk6kv+b9DMIjsQ==}
+
+  mpegts.js@1.8.2:
+    resolution: {integrity: sha512-cZYMa5muASH55wrS6JK5IGkUqnCA96c0f+WdnW91jIK9s/N6NzjmTQDJNYg9A5u/G2Q5nj2b3w1Zwzze/9guxA==}
+    engines: {node: '>=20.9.0'}
 
   mrmime@2.0.1:
     resolution: {integrity: sha512-Y3wQdFg2Va6etvQ5I82yUhGdsKrcYox6p7FfL1LbK2J4V01F9TGlepTIhnK24t7koZibmg82KGglhA1XK5IsLQ==}
@@ -8290,6 +8306,8 @@ snapshots:
       is-date-object: 1.1.0
       is-symbol: 1.1.1
 
+  es6-promise@4.2.8: {}
+
   esbuild@0.28.1:
     optionalDependencies:
       '@esbuild/aix-ppc64': 0.28.1
@@ -8548,6 +8566,8 @@ snapshots:
   hasown@2.0.4:
     dependencies:
       function-bind: 1.1.2
+
+  hls.js@1.7.4: {}
 
   hoist-non-react-statics@3.3.2:
     dependencies:
@@ -9057,6 +9077,11 @@ snapshots:
       ufo: 1.6.4
 
   modern-ahocorasick@1.1.0: {}
+
+  mpegts.js@1.8.2:
+    dependencies:
+      es6-promise: 4.2.8
+      events: 3.3.0
 
   mrmime@2.0.1: {}
 

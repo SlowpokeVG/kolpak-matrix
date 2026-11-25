@@ -249,6 +249,44 @@ New hooks in Sable's files: `data-kolpak-row`, `data-muted`, `data-collapsed` an
 
 Still open in the room list: the box on space lists; the four Home actions (Create Room and so on) that the mockup does not show; PEOPLE rows with the presence square instead of avatars; the own-avatar footer with a 2px rule; column width 222px.
 
+### 2026-11-25 — check against the design canvas, and the stream player
+
+**Design check.** Compared the running app with the "The client" artboard of the design canvas and fixed what differed most:
+
+- Room header: 46px, 24px room avatar, name and topic on one line (hooks `kolpak-room-header` and `kolpak-room-header__titles` in `RoomViewHeader.tsx`).
+- Composer: an outlined box with no fill, placeholder "message <room>", orange caret (class `kolpak-composer` and the placeholder in `RoomInput.tsx`).
+- Home tab: the Guy on a paper square with 9px corners instead of a house icon (`HomeTab.tsx`).
+- Voice tree at 13px with 1px guides per level; status bar latency as "32ms".
+- The dock is open by default; closing it still persists.
+- 24-hour clock is the default for new installs (`config.json` → `settingsDefaults.hour24Clock`). Existing installs keep the stored setting; this machine still shows 12-hour times until it is switched in Settings → General.
+
+Left different on purpose, for the owner to decide:
+
+- **Name colours.** The mockup shows plain names; the app keeps the colours people pick for themselves in Sable (profile colours and power-level tag colours). Turning them off removes a feature the community may use.
+- **Timestamp position.** Sable's layout puts the time at the right edge; the mockup has it after the name. Changing it means editing Sable's message layout.
+- **The four Home actions** (Create Room, Join with Address, Explore Spaces, Message Search) above ROOMS are not in the mockup; they are kept because they are the only way to those functions from the list.
+- **Room-list footer.** Sable's own (avatar and three buttons) instead of the mockup's name and "on air" state line.
+
+**Stream player** (`src/kolpak/streams/StreamDock.tsx`, `player.ts`, `streamStore.ts`). The stream half of the live dock: ON AIR (or OFF AIR) tag, a channel picker that reads as the bold channel name, a 16:9 black picture with a 2px orange frame while live, and viewers · uptime · bitrate · streamer under it. FLV is played with mpegts.js (the service's FLV comes over `wss://`), HLS with hls.js or natively on macOS and iOS; each library is loaded only when first used. mpegts.js is set to chase the live edge (at most 3 s behind). Nothing plays until the picture is clicked; volume is remembered. Clicking a live channel in the status bar picks it and opens the dock. The dock's channel defaults to the busiest live one and remembers the user's pick.
+
+Verified in the app against the live service: channel `stream` played at 1920×1080 within about 3 seconds of the click, stats filled in. Then paused again.
+
+Not built yet: theater mode (the same player, big, with chat beside it), the format switch, DASH, picture-in-picture beyond what the native controls offer, and the ON AIR row in the timeline.
+
+### 2026-11-25 — theater mode
+
+Built against the "Theater mode" artboard (DESIGN §4). WATCH in the dock (or the dock's player) opens it; EXIT THEATER closes it.
+
+- **Layout** (`src/kolpak/theater/Theater.tsx`, mounted from `ClientLayout.tsx`): the space rail and the status bar stay; the room list, the room and the dock give way to the stream column and a 320px chat column. The routes stay mounted, only hidden, so the room and its scroll position are as they were on the way back.
+- **Header** (52px): ON AIR / OFF AIR, the streamer in Anton 22, viewers · uptime · bitrate, a FLV / HLS / DASH switch (the active one a paper block; formats the channel does not offer are greyed; DASH is always greyed because it is not played), EXIT THEATER.
+- **Picture** fills the column, no frame. **Channels** as chips: live with the orange dot and viewers, the selected one a paper block, offline muted "name --". **Voice line** (`theater/VoiceStrip.tsx`), one 48px row: "in voice" with a green square on the left; on the right the channel you are in as a button, then the mic and deafen buttons at 32px (`VoiceButtons size="small"`). The channel button opens the channel list upwards (indented by depth, user counts, yours inverted); picking one moves you there, Escape or a click elsewhere closes it. No list of people: the dock has the full tree. When not in voice: "not in voice" and JOIN VOICE. If the server refuses a move (a channel you may not enter), its reason shows in orange on the line for 5 s.
+- **One player** (`src/kolpak/streams/sharedPlayer.ts`): a single `<video>` that both the dock and theater host. Switching views moves the element instead of reloading; checked live, playback carried on from 14.6 s to 16.1 s across the switch, same element. When no view hosts it any more (the dock closed), playback stops. Picking another channel or format while something plays switches to it; a channel going off air stops it.
+- **Chat column** (`TheaterChat.tsx`): not Sable's timeline but a compact view of one room, `HH:MM name text` at 13px, names green while that person talks in voice and orange for the streamer, images and files as `[image]` / `[file]`, replies without their quoted fallback, a plain text composer. It starts on the room that was open and has a switch-room list. Checked live: 21 lines of the test room shown, Cyrillic intact.
+
+**Images in the theater chat** (asked for by the owner): images show under their line through Sable's own image component, so encrypted and authenticated media, spoilers and the full-size viewer behave as in the timeline (checked live: five images in the test room loaded). Images are posted with the attach button, by pasting, or by dropping onto the message field; `chatImages.ts` uses Sable's encrypt, upload and image-message helpers, so posts carry size, blurhash and a thumbnail like posts from the main composer. Posting was not tried live, to keep test images out of the community room.
+
+Not done from the design: the hamburger at the bottom of the space rail that brings back the room list (that needs a button in Sable's rail), "general 3 unread" in the status bar, GIF and emoji pickers in the theater composer, the ON AIR row in the timeline, and which Matrix room belongs to which stream (theater uses the open room; SPEC §4 has the open question). Sending from the theater composer was not tried, so as not to post into the community room.
+
 ## Spike 2 log (Mumble)
 
 ### 2026-11-25 — control connection, channel tree, dock, settings

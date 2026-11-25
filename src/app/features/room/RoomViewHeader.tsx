@@ -329,7 +329,13 @@ export function RoomViewHeader({ callView }: Readonly<{ callView?: boolean }>) {
   };
 
   return (
-    <PageHeader className={classNames(ContainerColor({ variant: 'Surface' }), css.HeaderBalance)}>
+    <PageHeader
+      className={classNames(
+        ContainerColor({ variant: 'Surface' }),
+        css.HeaderBalance,
+        'kolpak-room-header'
+      )}
+    >
       <Box grow="Yes" gap="300">
         {screenSize === ScreenSize.Mobile && (
           <BackRouteHandler>
@@ -360,7 +366,7 @@ export function RoomViewHeader({ callView }: Readonly<{ callView?: boolean }>) {
               />
             </Avatar>
           )}
-          <Box direction="Column">
+          <Box direction="Column" className="kolpak-room-header__titles">
             <Text size={topic ? 'H5' : 'H3'} truncate>
               {name}
             </Text>

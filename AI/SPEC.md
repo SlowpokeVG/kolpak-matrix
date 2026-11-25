@@ -149,6 +149,7 @@ mumble://stats     { pingMs }
 mumble://text      { actor?, message }
 mumble://talking   { sessions }                 // everyone else who is speaking, when it changes
 mumble://transport { udp }                      // voice switched between UDP and the tunnel
+mumble://denied    { reason }                   // the server refused something (a move); reason is a sentence
 audio://levels     { input, output, transmitting }   // about 10 Hz while connected, only when it changes
 audio://capture    { deviceName?, error?, outputDeviceName?, outputError? }
 ```
@@ -170,7 +171,7 @@ Facts, read on 2026-11-25 from the station site's source (`klpq/klpq-angular`, a
 - **Channels are not a fixed list:** they come from the API; the default channel is `stream`.
 - The site has no licence file. Kolpak's `src/kolpak/streams` is written from the API's behaviour, not copied from it.
 
-Built so far: `src/kolpak/streams/stats.ts` (fetchers and pure logic) and `useStreamChannels.ts` (polling hook), feeding the status bar. No player yet.
+Built so far: `src/kolpak/streams/stats.ts` (fetchers, source picking, uptime), `useStreamChannels.ts` (polling, one query per channel shared by everything), `player.ts` (mpegts.js for FLV including over WebSocket, hls.js or native HLS), and `StreamDock.tsx` (the dock player). Verified playing the `stream` channel at 1080p. `sharedPlayer.ts` holds the one `<video>` that the dock and theater mode (`src/kolpak/theater/`) move between without reloading, as planned above. DASH is not built.
 
 Design:
 - `StreamProvider` interface: `listChannels()`, `status(channel) → { live, viewers?, startedAt?, bitrateKbps?, title? }`, `sources(channel) → [{ kind: "flv"|"hls"|"dash"|"webrtc", url }]`.

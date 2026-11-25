@@ -6,11 +6,34 @@ import {
   orderChannels,
   toChannelStatus,
   type ChannelStatus,
+  type StatsStream,
 } from './stats';
 
 // Same cadence as the station site.
 const POLL_MS = 10_000;
 const CHANNEL_LIST_STALE_MS = 5 * 60_000;
+
+// One query per channel, shared by the status bar and the player so they poll once.
+const channelQuery = (statsUrl: string | undefined, name: string) => ({
+  queryKey: ['kolpak', 'streams', 'channel', statsUrl, name],
+  queryFn: ({ signal }: { signal: AbortSignal }) => fetchChannelStreams(statsUrl!, name, signal),
+  enabled: Boolean(statsUrl),
+  refetchInterval: POLL_MS,
+  staleTime: POLL_MS / 2,
+  retry: false,
+});
+
+/** The streams one channel is serving right now, polled. */
+export function useChannelStreams(
+  statsUrl: string | undefined,
+  name: string | undefined
+): StatsStream[] | undefined {
+  const query = useQuery({
+    ...channelQuery(statsUrl, name ?? ''),
+    enabled: Boolean(statsUrl) && Boolean(name),
+  });
+  return query.data;
+}
 
 /**
  * Every channel the stats API lists, with its live state, polled.
@@ -30,14 +53,7 @@ export function useStreamChannels(statsUrl: string | undefined): ChannelStatus[]
   const channelNames = names.data;
 
   const results = useQueries({
-    queries: (channelNames ?? []).map((name) => ({
-      queryKey: ['kolpak', 'streams', 'channel', statsUrl, name],
-      queryFn: ({ signal }: { signal: AbortSignal }) =>
-        fetchChannelStreams(statsUrl!, name, signal),
-      refetchInterval: POLL_MS,
-      staleTime: POLL_MS / 2,
-      retry: false,
-    })),
+    queries: (channelNames ?? []).map((name) => channelQuery(statsUrl, name)),
   });
 
   const signature = results.map((result) => result.dataUpdatedAt).join();

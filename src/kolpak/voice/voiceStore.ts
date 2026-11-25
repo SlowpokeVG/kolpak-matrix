@@ -41,6 +41,7 @@ const applyStatePayload = (payload: VoiceStatePayload): void => {
           outputError: undefined,
           talking: [],
           udp: false,
+          denied: undefined,
         }),
   });
 };
@@ -94,6 +95,9 @@ export function startVoiceBridge(): void {
       setState({ talking: event.payload.sessions })
     ),
     listen<{ udp: boolean }>('mumble://transport', (event) => setState({ udp: event.payload.udp })),
+    listen<{ reason: string }>('mumble://denied', (event) =>
+      setState({ denied: { reason: event.payload.reason, at: Date.now() } })
+    ),
   ]);
   // Events are not replayed, so a freshly loaded webview asks once for where things stand.
   invoke<{

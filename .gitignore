@@ -39,6 +39,7 @@ dist-js
 
 # Rust build artifacts
 src-tauri/target/
+crates/*/target/
 # Tauri Android build outputs
 src-tauri/gen/android/app/build/
 # Tauri Apple outputs

@@ -29,6 +29,8 @@ type StatusBarProps = {
   /** Tooltip of the voice button; defaults to join or leave. */
   voiceTitle?: string;
   onVoiceClick?: () => void;
+  /** Makes live channels buttons. */
+  onStreamClick?: (name: string) => void;
 };
 
 const formatClock = (date: Date): string =>
@@ -63,6 +65,7 @@ export function StatusBar({
   voiceError,
   voiceTitle,
   onVoiceClick,
+  onStreamClick,
 }: StatusBarProps) {
   const clock = useClock();
 
@@ -80,11 +83,25 @@ export function StatusBar({
       {streams && streams.length > 0 ? (
         streams.map((stream) =>
           stream.live ? (
-            <span key={stream.name} className="kolpak-status-bar__live">
-              <span className="kolpak-status-bar__dot kolpak-round" aria-hidden="true" />
-              {stream.name}
-              {stream.viewers !== undefined && <span>{stream.viewers}</span>}
-            </span>
+            onStreamClick ? (
+              <button
+                key={stream.name}
+                type="button"
+                className="kolpak-status-bar__live kolpak-status-bar__button"
+                onClick={() => onStreamClick(stream.name)}
+                title={`watch ${stream.name}`}
+              >
+                <span className="kolpak-status-bar__dot kolpak-round" aria-hidden="true" />
+                {stream.name}
+                {stream.viewers !== undefined && <span>{stream.viewers}</span>}
+              </button>
+            ) : (
+              <span key={stream.name} className="kolpak-status-bar__live">
+                <span className="kolpak-status-bar__dot kolpak-round" aria-hidden="true" />
+                {stream.name}
+                {stream.viewers !== undefined && <span>{stream.viewers}</span>}
+              </span>
+            )
           ) : (
             <span key={stream.name} className="kolpak-status-bar__idle">
               {stream.name} --
@@ -113,7 +130,7 @@ export function StatusBar({
       ) : (
         <span className={voiceClass}>{voiceLabel}</span>
       )}
-      {voice?.pingMs !== undefined && <span>{voice.pingMs} ms</span>}
+      {voice?.pingMs !== undefined && <span>{voice.pingMs}ms</span>}
     </footer>
   );
 }

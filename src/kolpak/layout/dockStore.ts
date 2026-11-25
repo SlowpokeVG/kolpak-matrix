@@ -1,15 +1,15 @@
 import { useSyncExternalStore } from 'react';
 
-// Whether the live dock is open. It collapses to give chat the full width, and the choice
-// persists (AI/DESIGN.md §3.4).
+// Whether the live dock is open. Open by default; it collapses to give chat the full width,
+// and the choice persists (AI/DESIGN.md §3.4).
 
 const STORAGE_KEY = 'kolpak:dock:open';
 
 const read = (): boolean => {
   try {
-    return localStorage.getItem(STORAGE_KEY) === 'true';
+    return localStorage.getItem(STORAGE_KEY) !== 'false';
   } catch {
-    return false;
+    return true;
   }
 };
 

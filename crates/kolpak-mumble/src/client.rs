@@ -127,6 +127,7 @@ pub enum Event {
         actor: Option<u32>,
         message: String,
     },
+    /// The server refused something we asked for; `reason` is a sentence for the user.
     Denied {
         reason: String,
     },
@@ -445,7 +446,7 @@ impl Session {
             MessageType::PermissionDenied => {
                 let msg = decode!(proto::PermissionDenied);
                 out.events.push(Event::Denied {
-                    reason: msg.reason.unwrap_or_else(|| "permission denied".into()),
+                    reason: describe_denial(&msg),
                 });
             }
             // Everything Kolpak does not use yet. Tunnelled voice and the UDP key material
@@ -979,5 +980,83 @@ mod tests {
             }
         }
         task.await.unwrap();
+    }
+}
+
+/// Bit for "enter this channel" in Mumble's permission mask.
+const PERMISSION_ENTER: u32 = 0x4;
+
+/// A sentence for a PermissionDenied: the server's own text when it sends one, otherwise
+/// one made from the denial type (Mumble.proto `PermissionDenied.DenyType`).
+pub(crate) fn describe_denial(msg: &proto::PermissionDenied) -> String {
+    if let Some(reason) = msg
+        .reason
+        .as_deref()
+        .map(str::trim)
+        .filter(|r| !r.is_empty())
+    {
+        return reason.to_string();
+    }
+    match msg.r#type.unwrap_or(0) {
+        1 if msg.permission.is_some_and(|p| p & PERMISSION_ENTER != 0) => {
+            "you are not allowed into that channel.".into()
+        }
+        1 => "you are not allowed to do that here.".into(),
+        2 => "only the server's superuser can do that.".into(),
+        7 => "that needs a registered certificate.".into(),
+        9 => "that channel is full.".into(),
+        _ => "the server refused that.".into(),
+    }
+}
+
+#[cfg(test)]
+mod denial_tests {
+    use super::*;
+
+    fn denied(
+        r#type: i32,
+        permission: Option<u32>,
+        reason: Option<&str>,
+    ) -> proto::PermissionDenied {
+        proto::PermissionDenied {
+            permission,
+            channel_id: Some(3),
+            session: None,
+            reason: reason.map(Into::into),
+            r#type: Some(r#type),
+            name: None,
+        }
+    }
+
+    #[test]
+    fn server_text_wins() {
+        assert_eq!(
+            describe_denial(&denied(0, None, Some(" go away "))),
+            "go away"
+        );
+    }
+
+    #[test]
+    fn entering_a_closed_channel() {
+        assert_eq!(
+            describe_denial(&denied(1, Some(0x4), None)),
+            "you are not allowed into that channel."
+        );
+        assert_eq!(
+            describe_denial(&denied(1, Some(0x1), Some(""))),
+            "you are not allowed to do that here."
+        );
+    }
+
+    #[test]
+    fn full_channel_and_unknown() {
+        assert_eq!(
+            describe_denial(&denied(9, None, None)),
+            "that channel is full."
+        );
+        assert_eq!(
+            describe_denial(&denied(42, None, None)),
+            "the server refused that."
+        );
     }
 }

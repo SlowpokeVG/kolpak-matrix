@@ -13,6 +13,7 @@
 //!   mumble://text      { actor?, message }
 //!   mumble://transport { udp }                        voice switched between UDP and the tunnel
 //!   mumble://talking   { sessions }                   who is speaking, when it changes
+//!   mumble://denied    { reason }                     the server refused something (a move, say)
 //!   audio://levels     { input, output, transmitting }  about ten times a second while connected
 //!   audio://capture    { deviceName?, error?, outputDeviceName?, outputError? }
 //!                                                     when a device opens or fails
@@ -42,6 +43,7 @@ const EVENT_STATS: &str = "mumble://stats";
 const EVENT_TEXT: &str = "mumble://text";
 const EVENT_TALKING: &str = "mumble://talking";
 const EVENT_TRANSPORT: &str = "mumble://transport";
+const EVENT_DENIED: &str = "mumble://denied";
 const EVENT_LEVELS: &str = "audio://levels";
 const EVENT_CAPTURE: &str = "audio://capture";
 
@@ -75,6 +77,12 @@ pub struct MumbleStatePayload {
 #[serde(rename_all = "camelCase")]
 pub struct MumbleStatsPayload {
     pub ping_ms: f32,
+}
+
+#[derive(Debug, Clone, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct MumbleDeniedPayload {
+    pub reason: String,
 }
 
 #[derive(Debug, Clone, Serialize)]
@@ -651,6 +659,7 @@ pub async fn mumble_connect<R: Runtime>(
                 }
                 Event::Denied { reason } => {
                     log::warn!("mumble: permission denied: {reason}");
+                    let _ = app.emit(EVENT_DENIED, MumbleDeniedPayload { reason });
                 }
                 Event::Disconnected(reason) => {
                     let error = describe_disconnect(&reason);

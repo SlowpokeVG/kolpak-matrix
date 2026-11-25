@@ -22,6 +22,14 @@
     font-size: 14px;
   }
 
+  .kolpak-dock__voice {
+    flex: 1 1 auto;
+    min-height: 0;
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+  }
+
   /* Section label: Anton 15, wide tracking, muted (§5). */
   .kolpak-dock__label {
     font-family: var(--kolpak-font-head, inherit);
@@ -85,6 +93,7 @@
     padding: 0;
     list-style: none;
     overflow-y: auto;
+    font-size: 13px;
     line-height: 1.6;
   }
 
@@ -95,8 +104,9 @@
     min-width: 0;
   }
 
-  /* The channel we are in is an inverted block. */
+  /* The channel we are in is an inverted block; it hides the guides behind it. */
   .kolpak-tree__row--channel[data-current='true'] {
+    background-image: none !important;
     background: var(--kolpak-paper, var(--sable-sec-main));
     color: var(--kolpak-ink, var(--sable-sec-on-main));
     font-weight: 700;
@@ -186,6 +196,14 @@
     border: 2px solid var(--kolpak-line, currentColor);
     color: var(--kolpak-muted, inherit);
     cursor: pointer;
+  }
+  .kolpak-dock__square--small {
+    width: 32px;
+    height: 32px;
+  }
+  .kolpak-dock__square--small svg {
+    width: 16px;
+    height: 16px;
   }
   .kolpak-dock__square:disabled {
     cursor: default;

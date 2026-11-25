@@ -67,6 +67,8 @@ export type VoiceState = {
   talking: readonly number[];
   /** True while voice uses the low-delay UDP channel, false while it is tunnelled. */
   udp: boolean;
+  /** The server's last refusal (a channel we may not enter, say), and when it came. */
+  denied?: { reason: string; at: number };
 };
 
 export const EMPTY_SNAPSHOT: VoiceSnapshot = { session: null, channels: [], users: [] };

@@ -45,6 +45,53 @@ export function orderChannels(channels: ChannelStatus[]): ChannelStatus[] {
   });
 }
 
+export type PlayableProtocol = (typeof PLAYABLE_PROTOCOLS)[number];
+
+export type StreamSource = {
+  protocol: PlayableProtocol;
+  url: string;
+};
+
+/**
+ * The best source the webview can play. HTTP-FLV (here usually FLV over WebSocket) has the
+ * least delay, then HLS. DASH is listed by the service but not played yet: it would need a
+ * third player library and the service has not been seen offering it.
+ */
+export function pickSource(
+  streams: StatsStream[],
+  prefer?: PlayableProtocol
+): StreamSource | undefined {
+  const order: PlayableProtocol[] = prefer ? [prefer, 'flv', 'hls'] : ['flv', 'hls'];
+  for (const protocol of order) {
+    const stream = streams.find((entry) => entry.protocol === protocol && entry.urls?.edge);
+    if (stream?.urls?.edge) return { protocol, url: stream.urls.edge };
+  }
+  return undefined;
+}
+
+/** The protocols a channel offers that this player can use, in preference order. */
+export function playableProtocols(streams: StatsStream[]): PlayableProtocol[] {
+  return (['flv', 'hls'] as const).filter((protocol) =>
+    streams.some((entry) => entry.protocol === protocol && entry.urls?.edge)
+  );
+}
+
+/** Seconds on air at `now`, from the stream's start time when it has one. */
+export function uptimeSeconds(stream: StatsStream | undefined, now: number): number | undefined {
+  if (!stream) return undefined;
+  const started = stream.startTime ? Date.parse(stream.startTime) : Number.NaN;
+  if (!Number.isNaN(started)) return Math.max(0, Math.floor((now - started) / 1000));
+  return stream.duration;
+}
+
+/** Seconds as a tape counter: 01:24:07. */
+export function formatTape(seconds: number): string {
+  const whole = Math.max(0, Math.floor(seconds));
+  return [Math.floor(whole / 3600), Math.floor(whole / 60) % 60, whole % 60]
+    .map((part) => String(part).padStart(2, '0'))
+    .join(':');
+}
+
 const trimBase = (baseUrl: string): string => baseUrl.replace(/\/+$/, '');
 
 export async function fetchChannelNames(baseUrl: string, signal?: AbortSignal): Promise<string[]> {
