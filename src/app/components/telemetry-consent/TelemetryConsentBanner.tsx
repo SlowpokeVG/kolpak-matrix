@@ -27,13 +27,13 @@ export function TelemetryConsentBanner() {
       id: 'telemetry-consent',
       priority: 100, // Higher priority than device verification
       icon: Shield,
-      title: 'Help improve Sable',
+      title: 'Help improve Kolpak',
       description: (
         <Text size="T300" priority="300">
           Optionally send anonymous crash reports to help us fix bugs faster. No messages, room
           names, or personal data are included.{' '}
           <a
-            href="https://github.com/SableClient/Sable/blob/dev/docs/PRIVACY.md"
+            href="https://github.com/klpq/kolpak-matrix/blob/main/docs/PRIVACY.md"
             target="_blank"
             rel="noreferrer noopener"
           >

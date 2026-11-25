@@ -36,10 +36,16 @@ fn main() {
     };
 
     println!("cargo:rustc-env=SABLE_PRODUCT_NAME={}", base);
-    println!(
-        "cargo:rustc-env=TAURI_CONFIG={{\"productName\":\"{}\"}}",
-        full_name
-    );
+    // Kolpak: upstream emits only `{"productName": ...}` here, which replaces the config the
+    // Tauri CLI passes in TAURI_CONFIG and so silently drops every `--config` override
+    // (identifier, deep-link schemes) from the compiled context. Merge into it instead.
+    let mut tauri_config = std::env::var("TAURI_CONFIG")
+        .ok()
+        .and_then(|raw| serde_json::from_str::<serde_json::Value>(&raw).ok())
+        .filter(serde_json::Value::is_object)
+        .unwrap_or_else(|| serde_json::json!({}));
+    tauri_config["productName"] = serde_json::Value::String(full_name.clone());
+    println!("cargo:rustc-env=TAURI_CONFIG={tauri_config}");
     println!("cargo:rerun-if-env-changed=SABLE_BUILD_FLAVOR");
     // Find libcef.so next to the binary (CEF ships it there).
     if std::env::var_os("CARGO_FEATURE_CEF").is_some()

@@ -62,7 +62,7 @@ export function BatteryOptimizationSetting({ active }: BatteryOptimizationSettin
       {requestState.status === AsyncStatus.Error && (
         <Text as="span" style={{ color: color.Critical.Main }} size="T200">
           <br />
-          Could not open the battery settings. Allow unrestricted battery use for Sable manually.
+          Could not open the battery settings. Allow unrestricted battery use for Kolpak manually.
         </Text>
       )}
     </SettingTile>

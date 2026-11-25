@@ -14,7 +14,7 @@ import { TAURI_OIDC_CLIENT_URI, buildTauriOidcRedirectUrl } from '$pages/auth/SS
 
 const log = createLogger('oidcLogin');
 
-const CLIENT_NAME = 'Sable';
+const CLIENT_NAME = 'Kolpak';
 
 export enum OidcLoginError {
   RegistrationFailed = 'RegistrationFailed',

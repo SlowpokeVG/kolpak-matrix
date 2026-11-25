@@ -91,7 +91,7 @@ function buildWebPusherData(
       kind: MATRIX_UNSTABLE_MSC4174_WEBPUSH_PUSHER_KIND,
       app_id: clientConfig.pushNotificationDetails?.webPushAppID,
       pushkey,
-      app_display_name: 'Sable (Web Push)',
+      app_display_name: 'Kolpak (Web Push)',
       device_display_name: deviceDisplayName,
       lang: navigator.language || 'en',
       data: {

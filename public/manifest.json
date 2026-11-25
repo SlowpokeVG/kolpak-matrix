@@ -1,7 +1,7 @@
 {
-  "name": "Sable",
-  "short_name": "Sable",
-  "description": "An almost stable Matrix client",
+  "name": "Kolpak",
+  "short_name": "Kolpak",
+  "description": "The KLPQ Matrix client",
   "dir": "auto",
   "lang": "en-US",
   "display": "standalone",

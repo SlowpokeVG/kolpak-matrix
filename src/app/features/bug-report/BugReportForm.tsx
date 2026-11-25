@@ -13,7 +13,7 @@ type SimilarIssue = {
   html_url: string;
 };
 
-const GITHUB_REPO = 'SableClient/Sable';
+const GITHUB_REPO = 'klpq/kolpak-matrix';
 
 async function searchSimilarIssues(query: string, signal: AbortSignal): Promise<SimilarIssue[]> {
   // Split into individual words, drop very short ones, and join with OR so that
@@ -52,7 +52,7 @@ export function buildGitHubUrl(
     if (fields.reproduction) params.reproduction = fields.reproduction;
     if (fields['expected-behavior']) params['expected-behavior'] = fields['expected-behavior'];
     // Auto-populate the platform/versions field
-    params.info = `- OS: ${navigator.platform || 'unknown'}\n- Browser: ${navigator.userAgent}\n- Sable: ${version}`;
+    params.info = `- OS: ${navigator.platform || 'unknown'}\n- Browser: ${navigator.userAgent}\n- Kolpak: ${version}`;
     if (fields.context) params.context = fields.context;
   } else {
     params.template = 'feature_request.yml';
@@ -350,7 +350,7 @@ export function BugReportForm({ onDone }: { onDone: () => void }) {
         <Box direction="Column" gap="100">
           <Text size="L400">Platform info (auto-included)</Text>
           <Text size="T200" style={{ opacity: 0.7, wordBreak: 'break-all' }}>
-            {`Sable v${APP_VERSION}${IS_RELEASE_TAG ? '' : '-dev'} • ${navigator.userAgent}`}
+            {`Kolpak v${APP_VERSION}${IS_RELEASE_TAG ? '' : '-dev'} • ${navigator.userAgent}`}
           </Text>
         </Box>
       )}

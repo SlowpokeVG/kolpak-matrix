@@ -1,7 +1,7 @@
 import { SSO_CALLBACK_PATH } from '$pages/paths';
 import { type as osType } from '@tauri-apps/plugin-os';
 
-const TAURI_SSO_PROTOCOL = 'sable:';
+const TAURI_SSO_PROTOCOL = 'kolpak:';
 const TAURI_SSO_HOST = 'login';
 
 const getAppBaseUrl = (): string => {
@@ -54,9 +54,11 @@ export const buildTauriSsoRedirectUrl = (server?: string): string => {
   return `${getAppBaseUrl()}${SSO_CALLBACK_PATH}?${params}`;
 };
 
-export const TAURI_OIDC_CLIENT_URI = 'https://app.sable.moe';
+// Kolpak: OIDC private-use scheme must be the reverse-DNS of this host. klpq.io is assumed
+// to be the community's domain; confirm before relying on OIDC login.
+export const TAURI_OIDC_CLIENT_URI = 'https://klpq.io';
 
-const TAURI_OIDC_PROTOCOL = 'moe.sable.app:';
+const TAURI_OIDC_PROTOCOL = 'io.klpq:';
 const TAURI_OIDC_PATH = '/login';
 
 export const buildTauriOidcRedirectUrl = (): string => `${TAURI_OIDC_PROTOCOL}${TAURI_OIDC_PATH}`;
@@ -71,8 +73,8 @@ export const parseTauriOidcCallback = (
     const callbackUrl = new URL(rawUrl);
     if (callbackUrl.protocol !== TAURI_OIDC_PROTOCOL) return undefined;
 
-    // `moe.sable.app:/login?...`  → hostname === '', pathname === '/login'
-    // `moe.sable.app://login?...` → hostname === 'login', pathname === '/' or ''
+    // `io.klpq:/login?...`  → hostname === '', pathname === '/login'
+    // `io.klpq://login?...` → hostname === 'login', pathname === '/' or ''
     const hasLoginPath =
       callbackUrl.pathname === TAURI_OIDC_PATH || callbackUrl.pathname === `${TAURI_OIDC_PATH}/`;
 

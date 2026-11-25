@@ -240,7 +240,7 @@ export function KeyboardShortcuts({ requestBack, requestClose }: KeyboardShortcu
                   </Text>
                   {category === 'Global' && (
                     <Text size="T300" priority="300">
-                      Shortcuts in the Global section work system-wide, even when Sable is not
+                      Shortcuts in the Global section work system-wide, even when Kolpak is not
                       focused.
                     </Text>
                   )}

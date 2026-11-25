@@ -16,13 +16,16 @@ crate-type = ["staticlib", "cdylib", "rlib"]
 [build-dependencies]
 serde_json = "1.0"
 tauri-build = { version = "2.6.3", features = [] }
-# 2.7 sorts embedded assets and CSP hashes for reproducible native libraries.
-tauri-codegen = "2.7.0"
+# Upstream pins 2.7.0 here (sorted embedded assets, for reproducible Android libs), but 2.7.0
+# emits tauri::image::default_window_icon_from_app_icon_resource() on Windows targets, which
+# tauri 2.11.5 does not have, so v1.22.11 fails to compile on Windows. Kolpak: stay on 2.6.x
+# (what tauri-macros/tauri-build 2.6.3 expect) until tauri itself is bumped.
+tauri-codegen = "~2.6.3"
 tauri-typegen = "0.5"
 
 [dev-dependencies]
 quote = "1"
-tauri-codegen = "2.7.0"
+tauri-codegen = "~2.6.3"
 tempfile = "3"
 
 [dependencies]

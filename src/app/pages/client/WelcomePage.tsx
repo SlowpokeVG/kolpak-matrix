@@ -15,13 +15,13 @@ export function WelcomePage() {
       >
         <PageHeroSection>
           <PageHero
-            icon={<img width="70" height="70" src={LogoSVG} alt="Sable Logo" />}
-            title="Welcome to Sable"
+            icon={<img width="70" height="70" src={LogoSVG} alt="Kolpak logo" />}
+            title="Welcome to Kolpak"
             subTitle={
               <span>
-                An almost stable Matrix client.{' '}
+                The KLPQ Matrix client.{' '}
                 <a
-                  href="https://github.com/SableClient/Sable"
+                  href="https://github.com/klpq/kolpak-matrix"
                   target="_blank"
                   rel="noreferrer noopener"
                 >
@@ -34,7 +34,7 @@ export function WelcomePage() {
               <Box grow="Yes" style={{ maxWidth: toRem(300) }} direction="Column" gap="300">
                 <Button
                   as="a"
-                  href="https://github.com/SableClient/Sable"
+                  href="https://github.com/klpq/kolpak-matrix"
                   target="_blank"
                   rel="noreferrer noopener"
                   before={menuIcon(Code)}
@@ -45,14 +45,14 @@ export function WelcomePage() {
                 </Button>
                 <Button
                   as="a"
-                  href="https://opencollective.com/sable"
+                  href="https://github.com/SableClient/Sable"
                   target="_blank"
                   rel="noreferrer noopener"
                   fill="Soft"
                   before={menuIcon(Heart)}
                 >
                   <Text as="span" size="B400" truncate>
-                    Support
+                    Sable (upstream)
                   </Text>
                 </Button>
               </Box>
@@ -60,7 +60,7 @@ export function WelcomePage() {
             <Box direction="Column" gap="200" alignItems="Center">
               <Button
                 as="a"
-                href="https://github.com/SableClient/Sable/blob/dev/CHANGELOG.md"
+                href="https://github.com/klpq/kolpak-matrix/blob/main/CHANGELOG.md"
                 target="_blank"
                 rel="noreferrer noopener"
                 before={menuIcon(Code)}

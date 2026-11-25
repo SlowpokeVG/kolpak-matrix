@@ -37,7 +37,7 @@ export function installConsolePasteScamWarning(): void {
       } else {
         window.setTimeout(() => {
           console.warn(
-            "%cIf you know what you're doing, check out our GitHub and contribute: https://github.com/SableClient/Sable",
+            "%cIf you know what you're doing, check out our GitHub and contribute: https://github.com/klpq/kolpak-matrix",
             CONTRIBUTE_STYLE
           );
         }, betweenPairsMs);

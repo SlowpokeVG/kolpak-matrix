@@ -1,0 +1,32 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1024 1024" role="img" aria-label="Kolpak">
+<defs><clipPath id="r"><rect width="1024" height="1024" rx="205" ry="205"/></clipPath></defs>
+<g clip-path="url(#r)">
+<rect width="1024" height="1024" fill="#EDEBE4"/>
+<g transform="scale(5.44681) translate(-6 0)">
+<g transform="translate(6 4)" fill="#FF4A1C">
+<path d="M52 70C50 30 150 28 150 72V120C150 160 120 178 100 180 78 178 52 160 52 120Z"/>
+<path d="M82 168L78 222H126L120 168Z"/>
+<path d="M52 88C38 82 36 112 52 116ZM150 88C164 82 166 112 150 116Z"/>
+</g>
+<path d="M46 76C40 28 70 10 104 12 140 10 162 34 156 78 146 52 130 44 100 46 74 44 56 54 46 76Z" fill="#111111"/>
+<g fill="none" stroke="#111111" stroke-width="4" stroke-linecap="round" stroke-linejoin="round">
+<path d="M52 70V120C52 160 78 178 100 180 120 178 150 160 150 120V72"/>
+<path d="M82 172L78 222M120 172L126 222"/>
+<path d="M60 124C64 136 66 144 72 150M142 124C138 136 136 144 130 150M100 100L96 126 106 128M86 62H116"/>
+</g>
+<path d="M64 80L92 91M138 80L110 91" stroke="#111111" stroke-width="7" stroke-linecap="round"/>
+<g fill="#F4F4F0" stroke="#111111" stroke-width="3.5">
+<ellipse cx="79" cy="102" rx="13" ry="10"/><ellipse cx="123" cy="102" rx="13" ry="10"/>
+<path d="M76 142C90 136 112 136 126 142L124 158C110 163 92 163 78 158Z"/>
+</g>
+<circle cx="80" cy="103" r="5" fill="#2B4BFF"/><circle cx="122" cy="103" r="5" fill="#2B4BFF"/>
+<circle cx="80" cy="103" r="2" fill="#111111"/><circle cx="122" cy="103" r="2" fill="#111111"/>
+<path d="M88 140V161M100 139V162M112 140V161M77 150H125" stroke="#111111" stroke-width="2.5" fill="none"/>
+<path d="M38 98C22 -10 180 -10 164 98" fill="none" stroke="#111111" stroke-width="12" stroke-linecap="round"/>
+<path d="M38 98C22 -10 180 -10 164 98" fill="none" stroke="#F4F4F0" stroke-width="6" stroke-linecap="round"/>
+<rect x="26" y="88" width="22" height="42" rx="8" fill="#111111"/><rect x="154" y="88" width="22" height="42" rx="8" fill="#111111"/>
+<path d="M37 130C36 172 58 180 82 174" fill="none" stroke="#111111" stroke-width="5" stroke-linecap="round"/>
+<ellipse cx="88" cy="173" rx="11" ry="7" fill="#111111"/>
+</g>
+</g>
+</svg>

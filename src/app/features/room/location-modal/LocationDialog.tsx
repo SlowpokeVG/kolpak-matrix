@@ -94,7 +94,7 @@ type LocationDialogProps = {
 
 export enum LocationErrors {
   none,
-  permissions = 'You have denied Sable access to you location services',
+  permissions = 'You have denied Kolpak access to you location services',
   module = 'Your device does not have a gps module, or it may not be turned on',
   unsupported = 'Location services are unavailable in this build, enter or paste the coordinates instead',
   unknown = 'The sharing failed for unknown reasons',

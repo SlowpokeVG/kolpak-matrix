@@ -26,7 +26,7 @@ describe('buildTauriSsoRedirectUrl', () => {
 
     const url = new URL(buildTauriSsoRedirectUrl('https://hs.example'));
 
-    expect(url.protocol).toBe('sable:');
+    expect(url.protocol).toBe('kolpak:');
     expect(url.hostname).toBe('login');
     expect(url.pathname).toBe('/lp/sso-callback');
     expect(url.searchParams.get('server')).toBe('https://hs.example');
@@ -51,7 +51,7 @@ describe('buildTauriSsoRedirectUrl', () => {
   });
 
   it('builds the url without resolving against a non-special base', () => {
-    expect(buildTauriSsoRedirectUrl()).toMatch(/^sable:\/\/login\/lp\/sso-callback\?/);
+    expect(buildTauriSsoRedirectUrl()).toMatch(/^kolpak:\/\/login\/lp\/sso-callback\?/);
   });
 });
 
@@ -79,7 +79,7 @@ describe('parseTauriSsoCallback', () => {
   });
 
   it('rejects a missing loginToken', () => {
-    expect(parseTauriSsoCallback('sable://login/lp/sso-callback?server=x')).toBeUndefined();
+    expect(parseTauriSsoCallback('kolpak://login/lp/sso-callback?server=x')).toBeUndefined();
   });
 });
 
@@ -100,30 +100,30 @@ describe('isTauriSsoCallbackTarget', () => {
 
 describe('parseTauriOidcCallback', () => {
   it('parses code and state from single-slash format', () => {
-    expect(parseTauriOidcCallback('moe.sable.app:/login?code=c1&state=s1')).toEqual({
+    expect(parseTauriOidcCallback('io.klpq:/login?code=c1&state=s1')).toEqual({
       code: 'c1',
       state: 's1',
     });
   });
 
-  it('parses code and state from authority/hostname format (moe.sable.app://login)', () => {
-    expect(parseTauriOidcCallback('moe.sable.app://login?code=c1&state=s1')).toEqual({
+  it('parses code and state from authority/hostname format (io.klpq://login)', () => {
+    expect(parseTauriOidcCallback('io.klpq://login?code=c1&state=s1')).toEqual({
       code: 'c1',
       state: 's1',
     });
   });
 
   it('rejects the wrong path', () => {
-    expect(parseTauriOidcCallback('moe.sable.app:/other?code=c1&state=s1')).toBeUndefined();
-    expect(parseTauriOidcCallback('moe.sable.app://other?code=c1&state=s1')).toBeUndefined();
+    expect(parseTauriOidcCallback('io.klpq:/other?code=c1&state=s1')).toBeUndefined();
+    expect(parseTauriOidcCallback('io.klpq://other?code=c1&state=s1')).toBeUndefined();
   });
 
   it('rejects a different protocol', () => {
-    expect(parseTauriOidcCallback('sable://login?code=c1&state=s1')).toBeUndefined();
+    expect(parseTauriOidcCallback('kolpak://login?code=c1&state=s1')).toBeUndefined();
     expect(parseTauriOidcCallback('https://login?code=c1&state=s1')).toBeUndefined();
   });
 
   it('rejects an unrelated hostname with a login path', () => {
-    expect(parseTauriOidcCallback('moe.sable.app://evil/login?code=c1&state=s1')).toBeUndefined();
+    expect(parseTauriOidcCallback('io.klpq://evil/login?code=c1&state=s1')).toBeUndefined();
   });
 });
