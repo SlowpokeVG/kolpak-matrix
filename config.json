@@ -19,6 +19,10 @@
   },
 
   "streamStatsUrl": "https://stats-api.klpq.io/v1",
+  "mumble": {
+    "host": "mumble.klpq.io",
+    "port": 64738
+  },
 
   "settingsDefaults": {
     "useSystemTheme": false,

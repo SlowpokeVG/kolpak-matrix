@@ -67,6 +67,12 @@ export type ClientConfig = {
 
   /** Kolpak: base URL of the stream service stats API (src/kolpak/streams). */
   streamStatsUrl?: string;
+
+  /** Kolpak: the community Mumble server (src/kolpak/voice). */
+  mumble?: {
+    host: string;
+    port?: number;
+  };
 };
 
 const EMPTY_CONFIG: ClientConfig = {};

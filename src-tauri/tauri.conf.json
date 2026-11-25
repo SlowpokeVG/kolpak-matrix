@@ -73,7 +73,8 @@
       "validationLibrary": "none",
       "verbose": false,
       "typeMappings": {
-        "Response": "unknown"
+        "Response": "unknown",
+        "MumbleSnapshot": "unknown"
       }
     },
     "deep-link": {

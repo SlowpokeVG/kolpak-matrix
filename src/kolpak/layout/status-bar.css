@@ -48,6 +48,29 @@
     gap: 6px;
   }
 
+  /* The voice entry: a button that reads as bar text. */
+  .kolpak-status-bar__button {
+    appearance: none;
+    margin: 0;
+    padding: 0;
+    border: 0;
+    background: none;
+    color: inherit;
+    font: inherit;
+    cursor: pointer;
+  }
+  .kolpak-status-bar__button:hover:not(:disabled) {
+    text-decoration: underline;
+  }
+  .kolpak-status-bar__button:disabled {
+    cursor: default;
+  }
+
+  .kolpak-status-bar__error {
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+
   /* The live dot is the only circle in the design. */
   .kolpak-status-bar__dot {
     width: 8px;

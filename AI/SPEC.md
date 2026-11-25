@@ -115,31 +115,46 @@ Receive → decrypt → per-user jitter buffer → Opus decode (with PLC/FEC) �
 
 ### 5.5 Bridge API (Tauri)
 
-Commands (webview → Rust):
+Commands (webview → Rust). Built (control channel and sending voice, 2026-11-25):
 
 ```
-mumble_connect({ host, port, username, password? })
+mumble_connect({ args: { host, port?, username, password?, pinnedFingerprint? } })
+    → { fingerprint, pinned }
 mumble_disconnect()
 mumble_join_channel({ channelId })
-mumble_set_self({ mute?, deafen? })
+mumble_set_self({ mute?, deaf? })
+mumble_set_transmit({ args: { mode: "ptt" | "vad" | "continuous", vadThreshold?, inputDevice? } })
+mumble_ptt({ down })
+audio_list_input_devices() → [{ id, name, isDefault }]
+mumble_get_state() → { state, snapshot, pingMs?, capture }   // for a webview that just loaded
+```
+
+Still to come with receive:
+
+```
 mumble_set_user_volume({ session, gain })      // local only
 mumble_set_user_local_mute({ session, muted })
-mumble_set_transmit({ mode: "vad" | "ptt" | "continuous", vadThreshold? })
-mumble_ptt({ down })
-audio_list_devices() / audio_set_devices({ input?, output? })
-audio_set_volumes({ input?, output? })
+audio_list_output_devices() / audio_set_output({ device?, volume? })
 ```
 
-Events (Rust → webview):
+Events (Rust → webview). Built:
 
 ```
-mumble://state        { status: "disconnected"|"connecting"|"connected"|"reconnecting", error? }
-mumble://channels     { channels: [{ id, parent, name, position }] }   // full, then diffs
-mumble://users        { users: [{ session, name, channelId, mute, deaf, selfMute, selfDeaf }] }
-mumble://talking      { session, talking }
-mumble://stats        { pingMs, udp: boolean, loss }
-mumble://text         { from, channelId?, message }
-audio://levels        { input }                                          // ≤20 Hz, only while settings open
+mumble://state     { status: "disconnected"|"connecting"|"connected", session?, serverVersion?, error? }
+mumble://snapshot  { session, channels: [{ id, parent, name, position, temporary, maxUsers }],
+                     users: [{ session, name, channelId, mute, deaf, suppress, selfMute, selfDeaf,
+                              registered, prioritySpeaker, recording }] }   // the whole tree, on every change
+mumble://stats     { pingMs }
+mumble://text      { actor?, message }
+audio://levels     { input, transmitting }      // about 10 Hz while connected, only when it changes
+audio://capture    { deviceName?, error? }      // when the microphone opens or fails
+```
+
+Still to come with receive:
+
+```
+mumble://talking   { session, talking }
+mumble://stats     + { udp: boolean, loss }
 ```
 
 The frontend keeps a `voice` store fed only by these events; UI never calls into Mumble state synchronously.

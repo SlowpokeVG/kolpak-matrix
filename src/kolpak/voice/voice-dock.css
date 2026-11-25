@@ -1,0 +1,221 @@
+/*
+ * The live dock's VOICE section (AI/DESIGN.md §3.4): 290px, panel ground, padding 14/18.
+ * Layered like the other Kolpak components; see ../layout/status-bar.css for why Sable's
+ * layers are named first.
+ */
+@layer sable-reset, folds, reset, tokens, base, components, theme, user;
+
+@layer components {
+  .kolpak-dock {
+    flex: none;
+    width: 290px;
+    min-height: 0;
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+    padding: 14px 18px;
+
+    background: var(--kolpak-panel, var(--sable-bg-container));
+    border-left: 2px solid var(--kolpak-black, var(--sable-bg-container-line));
+    color: var(--kolpak-paper, var(--sable-bg-on-container));
+    font-family: var(--kolpak-font-body, var(--font-secondary));
+    font-size: 14px;
+  }
+
+  /* Section label: Anton 15, wide tracking, muted (§5). */
+  .kolpak-dock__label {
+    font-family: var(--kolpak-font-head, inherit);
+    font-size: 15px;
+    font-weight: 700;
+    font-synthesis: none;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+    color: var(--kolpak-muted, inherit);
+  }
+
+  .kolpak-dock__offline {
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+  }
+
+  .kolpak-dock__note {
+    margin: 0;
+    font-size: 13px;
+    line-height: 1.45;
+    color: var(--kolpak-muted, inherit);
+  }
+
+  /* Secondary button (§5): transparent, 2px paper border, Anton 17. */
+  .kolpak-dock__button {
+    appearance: none;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    height: 44px;
+    margin: 0;
+    padding: 0 20px;
+    cursor: pointer;
+
+    background: transparent;
+    border: 2px solid var(--kolpak-paper, currentColor);
+    color: var(--kolpak-paper, inherit);
+    font-family: var(--kolpak-font-head, inherit);
+    font-size: 17px;
+    font-weight: 700;
+    font-synthesis: none;
+    letter-spacing: 0.06em;
+    text-transform: uppercase;
+  }
+  .kolpak-dock__button:hover:not(:disabled) {
+    background: var(--kolpak-paper, currentColor);
+    color: var(--kolpak-ink, var(--sable-bg-container));
+  }
+  .kolpak-dock__button:disabled {
+    cursor: default;
+    border-color: var(--kolpak-line, currentColor);
+    color: var(--kolpak-muted, inherit);
+  }
+
+  /* The outline. Each level indents 17px; tree line-height is 1.6. */
+  .kolpak-tree {
+    flex: 1 1 auto;
+    min-height: 0;
+    margin: 0;
+    padding: 0;
+    list-style: none;
+    overflow-y: auto;
+    line-height: 1.6;
+  }
+
+  .kolpak-tree__row {
+    display: flex;
+    align-items: baseline;
+    gap: 6px;
+    min-width: 0;
+  }
+
+  /* The channel we are in is an inverted block. */
+  .kolpak-tree__row--channel[data-current='true'] {
+    background: var(--kolpak-paper, var(--sable-sec-main));
+    color: var(--kolpak-ink, var(--sable-sec-on-main));
+    font-weight: 700;
+  }
+
+  .kolpak-tree__fold,
+  .kolpak-tree__name {
+    appearance: none;
+    margin: 0;
+    padding: 0;
+    border: 0;
+    background: none;
+    color: inherit;
+    font: inherit;
+    text-align: left;
+  }
+
+  .kolpak-tree__fold {
+    flex: none;
+    width: 11px;
+    cursor: pointer;
+  }
+  .kolpak-tree__fold:disabled {
+    cursor: default;
+  }
+
+  .kolpak-tree__name {
+    flex: 1 1 auto;
+    min-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    cursor: pointer;
+  }
+  .kolpak-tree__name:hover:not(:disabled) {
+    text-decoration: underline;
+  }
+  .kolpak-tree__name:disabled {
+    cursor: default;
+  }
+
+  .kolpak-tree__count {
+    flex: none;
+    padding-right: 4px;
+    font-variant-numeric: tabular-nums;
+  }
+
+  .kolpak-tree__user {
+    min-width: 0;
+    padding-left: 17px;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+  .kolpak-tree__row--user[data-self='true'] {
+    font-weight: 700;
+  }
+  /* Talking is green and bold. */
+  .kolpak-tree__row--user[data-talking='true'] {
+    color: var(--kolpak-green, var(--sable-success-main));
+    font-weight: 700;
+  }
+  .kolpak-tree__row--user[data-state='muted'],
+  .kolpak-tree__row--user[data-state='deafened'] {
+    color: var(--kolpak-muted, inherit);
+  }
+
+  /* Controls pinned to the bottom, 8px apart: two 44px squares and LEAVE filling the rest. */
+  .kolpak-dock__controls {
+    flex: none;
+    display: flex;
+    gap: 8px;
+  }
+
+  .kolpak-dock__square {
+    appearance: none;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    flex: none;
+    width: 44px;
+    height: 44px;
+    margin: 0;
+    padding: 0;
+
+    background: transparent;
+    border: 2px solid var(--kolpak-line, currentColor);
+    color: var(--kolpak-muted, inherit);
+    cursor: pointer;
+  }
+  .kolpak-dock__square:disabled {
+    cursor: default;
+  }
+  /* Icons: 20px stroke, 2px, mitred joins (DESIGN 2.5). */
+  .kolpak-dock__square svg {
+    fill: none;
+    stroke: currentColor;
+    stroke-width: 2;
+    stroke-linejoin: miter;
+    stroke-linecap: square;
+  }
+  /* Mic live is a green fill. */
+  .kolpak-dock__mic[aria-pressed='true'] {
+    background: var(--kolpak-green, var(--sable-success-main));
+    border-color: var(--kolpak-green, var(--sable-success-main));
+    color: var(--kolpak-ink, var(--sable-success-on-main));
+  }
+  /* Deafen is a paper outline, filled while deafened. */
+  .kolpak-dock__deaf {
+    border-color: var(--kolpak-paper, currentColor);
+    color: var(--kolpak-paper, inherit);
+  }
+  .kolpak-dock__deaf[aria-pressed='true'] {
+    background: var(--kolpak-paper, currentColor);
+    color: var(--kolpak-ink, var(--sable-bg-container));
+  }
+
+  .kolpak-dock__leave {
+    flex: 1 1 auto;
+    padding: 0;
+  }
+}

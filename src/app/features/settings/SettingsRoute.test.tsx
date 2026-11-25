@@ -74,6 +74,16 @@ const { mockMatrixClient, mockProfile, mockUseSetting, createSectionMock } = vi.
   };
 });
 
+// Kolpak: the status bar and the dock are layout chrome with their own tests, and need
+// providers (client config, query client) that this shell test does not set up.
+vi.mock('../../../kolpak/layout/ClientStatusBar', () => ({
+  ClientStatusBar: () => null,
+}));
+
+vi.mock('../../../kolpak/layout/ClientDock', () => ({
+  ClientDock: () => null,
+}));
+
 vi.mock('$hooks/useMatrixClient', () => ({
   useMatrixClient: () => mockMatrixClient,
 }));

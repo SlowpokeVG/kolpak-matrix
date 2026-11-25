@@ -11,6 +11,8 @@ mod matrix_crypto;
 mod mobile;
 #[cfg(any(target_os = "android", target_os = "ios"))]
 mod mobile_diagnostics;
+#[cfg(desktop)]
+mod mumble;
 mod network;
 mod sentry;
 mod share_inbox;
@@ -345,7 +347,8 @@ pub fn run() {
     #[cfg(desktop)]
     let builder = builder
         .plugin(tauri_plugin_store::Builder::default().build())
-        .manage(desktop::tray::DesktopSettingsState::default());
+        .manage(desktop::tray::DesktopSettingsState::default())
+        .manage(mumble::MumbleState::default());
 
     #[cfg(windows)]
     let builder = builder.manage(std::sync::Arc::new(
@@ -470,6 +473,22 @@ pub fn run() {
             network::media_protocol::prepare_loopback_media,
             network::media_protocol::ensure_loopback_media,
             sentry::set_native_sentry_enabled,
+            #[cfg(desktop)]
+            mumble::mumble_connect,
+            #[cfg(desktop)]
+            mumble::mumble_disconnect,
+            #[cfg(desktop)]
+            mumble::mumble_join_channel,
+            #[cfg(desktop)]
+            mumble::mumble_set_self,
+            #[cfg(desktop)]
+            mumble::mumble_set_transmit,
+            #[cfg(desktop)]
+            mumble::mumble_ptt,
+            #[cfg(desktop)]
+            mumble::audio_list_input_devices,
+            #[cfg(desktop)]
+            mumble::mumble_get_state,
             #[cfg(feature = "matrix-crypto")]
             matrix_crypto::engine_invoke,
             #[cfg(feature = "matrix-crypto")]

@@ -7,6 +7,7 @@ export type SettingsSectionId =
   | 'notifications'
   | 'devices'
   | 'desktop'
+  | 'voice'
   | 'emojis'
   | 'developer-tools'
   | 'experimental'
@@ -27,6 +28,7 @@ export const settingsSections = [
   { id: 'notifications', label: 'Notifications' },
   { id: 'devices', label: 'Devices' },
   { id: 'desktop', label: 'Desktop' },
+  { id: 'voice', label: 'Voice' },
   { id: 'emojis', label: 'Emojis & Stickers' },
   { id: 'developer-tools', label: 'Developer Tools' },
   { id: 'experimental', label: 'Experimental' },
