@@ -1,0 +1,98 @@
+[package]
+versioned_files = ["package.json", "src-tauri/tauri.conf.json", "src-tauri/Cargo.toml"]
+changelog = "CHANGELOG.md"
+extra_changelog_sections = [
+  { name = "Security", types = [
+    "security",
+  ] },
+  { name = "Breaking Changes", types = [
+    "major",
+  ] },
+  { name = "Features", types = [
+    "minor",
+  ] },
+  { name = "Fixes", types = [
+    "patch",
+  ] },
+  { name = "Documentation", types = [
+    "docs",
+  ] },
+  { name = "Notes", types = [
+    "note",
+  ] },
+]
+# assets = "marker" // TODO: add this later once we have assets
+
+[changes]
+ignore_conventional_commits = true
+
+[[workflows]]
+name = "prepare-release"
+help_text = "Prepare a release PR"
+
+[[workflows.steps]]
+type = "Command"
+command = "git switch -c release"
+
+[[workflows.steps]]
+type = "PrepareRelease"
+
+# IzzyOnDroid reads fastlane metadata from the tagged commit, so the changelog
+# has to be written here rather than in tauri-build.yml, which runs after tagging.
+[[workflows.steps]]
+type = "Command"
+command = "node scripts/fastlane-changelog.js $version && git add fastlane/metadata/android/en-US/changelogs"
+
+# Flathub reads the metainfo from the tagged commit for the same reason.
+[[workflows.steps]]
+type = "Command"
+command = "node scripts/flatpak-metainfo-release.js $version && git add packaging/flatpak/moe.sable.client.metainfo.xml"
+
+[[workflows.steps]]
+type = "Command"
+command = "git commit -m \"chore: prepare release $version\""
+
+[[workflows.steps]]
+type = "Command"
+command = "git push --force --set-upstream origin release"
+
+[[workflows.steps]]
+type = "CreatePullRequest"
+base = "dev"
+
+[workflows.steps.title]
+template = "chore: prepare release $version"
+
+[workflows.steps.body]
+template = """
+> **Preview the next release on [dev.sable.moe](https://dev.sable.moe)**
+
+> [!IMPORTANT]
+> Merging this PR will create a new release.
+
+$changelog"""
+
+[[workflows]]
+name = "release"
+help_text = "Create a GitHub release"
+
+[[workflows.steps]]
+type = "Release"
+
+[[workflows]]
+name = "document-change"
+help_text = "Create a new change file to be included in the next release"
+
+[[workflows.steps]]
+type = "CreateChangeFile"
+
+[github]
+owner = "SableClient"
+repo = "Sable"
+
+[release_notes]
+change_templates = [
+  "* $summary by @$pr_author_login in #$pr_number",
+  "* $summary by @$pr_author_login",
+  "* $summary",
+]
