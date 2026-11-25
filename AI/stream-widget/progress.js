@@ -3,12 +3,12 @@
 //   state: "done" | "now" | "todo"
 //   part:  0..1, how far the "now" step is (optional)
 window.KOLPAK_PROGRESS = {
-  now: "theater mode: simpler voice line, pick the voice channel right from it",
+  now: "chat: \"дать пососать\" in the message menu, sends /me with a mention",
   steps: [
     { name: "docs",    state: "done" },
     { name: "fork",    state: "now", part: 0.85 },
     { name: "styling", state: "done" },
-    { name: "mumble",  state: "now", part: 0.9 },
+    { name: "mumble",  state: "now", part: 0.92 },
     { name: "streams", state: "now", part: 0.85 },
     { name: "design",  state: "now", part: 0.75 },
     { name: "mobile",  state: "todo" }

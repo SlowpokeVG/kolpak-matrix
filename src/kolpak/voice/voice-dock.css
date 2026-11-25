@@ -93,6 +93,7 @@
     padding: 0;
     list-style: none;
     overflow-y: auto;
+    overflow-x: hidden;
     font-size: 13px;
     line-height: 1.6;
   }
@@ -172,6 +173,156 @@
   .kolpak-tree__row--user[data-state='muted'],
   .kolpak-tree__row--user[data-state='deafened'] {
     color: var(--kolpak-muted, inherit);
+  }
+
+  /* Other people's names are buttons that open their menu. */
+  .kolpak-tree__person {
+    appearance: none;
+    flex: 1 1 auto;
+    margin: 0;
+    border: 0;
+    background: none;
+    color: inherit;
+    font: inherit;
+    text-align: left;
+    cursor: pointer;
+  }
+  .kolpak-tree__person:hover .kolpak-tree__who,
+  .kolpak-tree__row--user[data-open='true'] .kolpak-tree__who {
+    text-decoration: underline;
+  }
+  /* What we set for someone: their volume, or "muted for you". Never green. */
+  .kolpak-tree__local {
+    color: var(--kolpak-dim, inherit);
+    font-weight: 400;
+  }
+  /* Muted for us: the name is dimmed and struck through, the tag is not. */
+  .kolpak-tree__row--user[data-local-muted='true'] .kolpak-tree__person {
+    color: var(--kolpak-dim, inherit);
+  }
+  .kolpak-tree__row--user[data-local-muted='true'] .kolpak-tree__who {
+    text-decoration: line-through;
+  }
+
+  /*
+   * A person's menu: its own line under their row, the tree's full width and not indented,
+   * so it never runs past the dock's edge. Two compact rows: the volume slider with its
+   * value, then MUTE FOR ME and RESET.
+   */
+  .kolpak-tree__menu {
+    margin: 2px 0 6px;
+  }
+  .kolpak-person {
+    box-sizing: border-box;
+    width: 100%;
+    padding: 8px;
+    border: 2px solid var(--kolpak-paper, currentColor);
+    background: var(--kolpak-black, transparent);
+    color: var(--kolpak-paper, inherit);
+  }
+  .kolpak-person__volume {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+  }
+  .kolpak-person__volume .kolpak-range {
+    flex: 1 1 auto;
+    min-width: 0;
+  }
+  .kolpak-person__value {
+    flex: none;
+    width: 4.5ch;
+    text-align: right;
+    font-weight: 700;
+  }
+  .kolpak-person__actions {
+    display: flex;
+    gap: 6px;
+    margin-top: 6px;
+  }
+  .kolpak-person__button {
+    appearance: none;
+    flex: 1 1 auto;
+    min-width: 0;
+    height: 28px;
+    margin: 0;
+    padding: 0 6px;
+    border: 2px solid var(--kolpak-line, currentColor);
+    background: none;
+    color: var(--kolpak-paper, inherit);
+    font: inherit;
+    font-size: 12px;
+    font-weight: 700;
+    text-transform: uppercase;
+    white-space: nowrap;
+    cursor: pointer;
+  }
+  .kolpak-person__reset {
+    flex: none;
+  }
+  .kolpak-person__button:hover:not(:disabled) {
+    border-color: var(--kolpak-paper, currentColor);
+  }
+  .kolpak-person__button[aria-pressed='true'] {
+    border-color: var(--kolpak-paper, currentColor);
+    background: var(--kolpak-paper, var(--sable-sec-main));
+    color: var(--kolpak-ink, var(--sable-sec-on-main));
+  }
+  .kolpak-person__button:disabled {
+    color: var(--kolpak-dim, inherit);
+    cursor: default;
+  }
+
+  /*
+   * Slider in the house style: a 2px line, paper up to the knob, and a square paper knob.
+   * The page sets --kolpak-range-fill to the knob's position.
+   */
+  .kolpak-range {
+    appearance: none;
+    height: 16px;
+    margin: 0;
+    background: transparent;
+    cursor: pointer;
+  }
+  .kolpak-range::-webkit-slider-runnable-track {
+    height: 2px;
+    background: linear-gradient(
+      to right,
+      var(--kolpak-paper, currentColor) var(--kolpak-range-fill, 50%),
+      var(--kolpak-line, currentColor) var(--kolpak-range-fill, 50%)
+    );
+  }
+  .kolpak-range::-webkit-slider-thumb {
+    appearance: none;
+    width: 12px;
+    height: 12px;
+    margin-top: -5px;
+    border: 0;
+    border-radius: 0;
+    background: var(--kolpak-paper, currentColor);
+  }
+  .kolpak-range::-moz-range-track {
+    height: 2px;
+    background: var(--kolpak-line, currentColor);
+  }
+  .kolpak-range::-moz-range-progress {
+    height: 2px;
+    background: var(--kolpak-paper, currentColor);
+  }
+  .kolpak-range::-moz-range-thumb {
+    width: 12px;
+    height: 12px;
+    border: 0;
+    border-radius: 0;
+    background: var(--kolpak-paper, currentColor);
+  }
+  .kolpak-range:disabled {
+    cursor: default;
+    opacity: 0.4;
+  }
+  .kolpak-range:focus-visible {
+    outline: 2px solid var(--kolpak-orange, currentColor);
+    outline-offset: 2px;
   }
 
   /* Controls pinned to the bottom, 8px apart: two 44px squares and LEAVE filling the rest. */

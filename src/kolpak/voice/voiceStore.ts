@@ -2,6 +2,7 @@ import { useSyncExternalStore } from 'react';
 import { invoke } from '@tauri-apps/api/core';
 import { listen, type UnlistenFn } from '@tauri-apps/api/event';
 import { isDesktopTauri } from '$utils/platform';
+import { gainsFor, getPeopleSettings, subscribePeople } from './peopleSettings';
 import {
   EMPTY_SNAPSHOT,
   INITIAL_VOICE_STATE,
@@ -17,9 +18,28 @@ import {
 let state: VoiceState = INITIAL_VOICE_STATE;
 const listeners = new Set<() => void>();
 
+// Per-person volume lives in the native mixer by session, and sessions change as people
+// come and go, so the set is sent again whenever the people on the server or the settings
+// change. Only then: the level meters update this store many times a second.
+let sentGains = '';
+const syncGains = (): void => {
+  if (state.status !== 'connected') {
+    sentGains = '';
+    return;
+  }
+  const gains = gainsFor(state.snapshot, getPeopleSettings());
+  const key = JSON.stringify(gains);
+  if (key === sentGains) return;
+  sentGains = key;
+  void invoke('mumble_set_user_gains', { gains }).catch(() => {
+    sentGains = '';
+  });
+};
+
 const setState = (patch: Partial<VoiceState>): void => {
   state = { ...state, ...patch };
   listeners.forEach((listener) => listener());
+  if (patch.snapshot !== undefined || patch.status !== undefined) syncGains();
 };
 
 const applyStatePayload = (payload: VoiceStatePayload): void => {
@@ -77,6 +97,7 @@ let bridge: Promise<UnlistenFn[]> | undefined;
 /** Start listening to the Mumble bridge. Safe to call more than once. */
 export function startVoiceBridge(): void {
   if (bridge || !isDesktopTauri()) return;
+  subscribePeople(syncGains);
   bridge = Promise.all([
     listen<VoiceStatePayload>('mumble://state', (event) => applyStatePayload(event.payload)),
     listen<VoiceSnapshot>('mumble://snapshot', (event) => setState({ snapshot: event.payload })),

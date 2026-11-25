@@ -287,6 +287,12 @@ Built against the "Theater mode" artboard (DESIGN §4). WATCH in the dock (or th
 
 Not done from the design: the hamburger at the bottom of the space rail that brings back the room list (that needs a button in Sable's rail), "general 3 unread" in the status bar, GIF and emoji pickers in the theater composer, the ON AIR row in the timeline, and which Matrix room belongs to which stream (theater uses the open room; SPEC §4 has the open question). Sending from the theater composer was not tried, so as not to post into the community room.
 
+### 2026-11-25 — "дать пососать" in the message menu
+
+Asked for by the owner: the menu on someone else's message (Sable's message options menu, so the desktop pop-out and the mobile sheet alike) has "дать пососать", placed after "Reply in Thread". It sends what typing `/me дал пососать <name>` would: an `m.emote` whose name is a real mention (a `matrix.to` link in `formatted_body` and `m.mentions.user_ids`), so it shows as a pill and pings them. The name is the room display name, else the ID's local part, HTML-escaped in the formatted body. A message in a thread gets its reply in that thread. Hidden on our own messages, redacted ones, and in rooms we may not post in; a failed send keeps the menu open with "не отправилось. ещё раз?".
+
+Code: `src/kolpak/chat/givePososat.ts` (content, the check, the send) and `PososatItem.tsx`; Sable's `Options.tsx` gains one import and one line. Tests: content shape, escaping, naming, when it is offered. Checked live by the owner, who sent two from the running app; they render as emotes with a mention pill.
+
 ## Spike 2 log (Mumble)
 
 ### 2026-11-25 — control connection, channel tree, dock, settings
@@ -368,8 +374,21 @@ The owner asked for receive, then for "all limits" from the previous entry to be
 - Automatic gain control.
 - Adaptive jitter buffer and packet-loss concealment.
 - Push to talk system-wide on macOS and Linux.
-- Per-user volume and local mute.
+- ~~Per-user volume and local mute.~~ Done, see the next entry.
 - The certificate pin and the voice settings are still in `localStorage`.
+
+### 2026-11-25 — per-person volume and "mute for me"
+
+Click someone else's name in the dock's voice tree: a panel opens on its own line under them (the full width of the tree, not indented, so it fits at any depth) with a volume slider, 0–200% in 5% steps, MUTE FOR ME and RESET. Only what this app plays changes; nothing goes to the server. Rows show what was set: "40%", or the name struck through with "off". Escape, a click elsewhere, or the name again closes it.
+
+- **Stored by Mumble name**, compared without case (`src/kolpak/voice/peopleSettings.ts`, localStorage `kolpak:voice:people`), so it survives reconnects; sessions change every time. Entries back at 100% and unmuted are forgotten.
+- **Applied in the native mixer** (`Mixer::set_session_gains` in `playback.rs`): a gain per session, 0 for muted. A muted speaker's buffer still drains, so unmuting resumes live instead of late. The bridge keeps the set (`mumble_set_user_gains`) and gives it to every new mixer; a new connection clears it.
+- **Resent from the voice store** whenever the people on the server or the settings change, never at the level meters' rate. Each change is logged as `mumble: per-person volume [session=gain, …]`.
+- The slider is styled as the house slider (`.kolpak-range`: a 2px line, paper up to the knob, square knob) for reuse elsewhere.
+
+Checked live: joining voice sent the saved 40% for one person by their new session; MUTE FOR ME sent 0; RESET emptied the set. The first version of the panel sat inside the indented row and pushed the tree sideways (the owner caught it); now it measures exactly the tree's width. Not heard by ear: nobody was speaking during the check. Mixer tests cover the gain, the clamp, draining while muted and forgetting people who leave.
+
+A testing trap: `window.__TAURI_INTERNALS__.invoke` is read-only, so wrapping it to record IPC calls silently does nothing. Use the log line instead.
 
 ## Starting a new Claude session on this
 

@@ -123,6 +123,7 @@ mumble_connect({ args: { host, port?, username, password?, pinnedFingerprint? } 
 mumble_disconnect()
 mumble_join_channel({ channelId })
 mumble_set_self({ mute?, deaf? })
+mumble_set_user_gains({ gains: [{ session, gain }] })   // per-person volume, 0 = muted for us; replaces the set
 mumble_set_transmit({ args: { mode: "ptt" | "vad" | "continuous", vadThreshold?, inputDevice?,
                               pttKey?, noiseSuppression? } })
 mumble_set_output({ args: { outputDevice?, volume? } })

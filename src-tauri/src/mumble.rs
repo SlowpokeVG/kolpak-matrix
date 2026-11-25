@@ -18,7 +18,7 @@
 //!   audio://capture    { deviceName?, error?, outputDeviceName?, outputError? }
 //!                                                     when a device opens or fails
 
-use std::collections::HashSet;
+use std::collections::{HashMap, HashSet};
 use std::sync::atomic::{AtomicU32, Ordering};
 use std::sync::Arc;
 use std::time::Duration;
@@ -170,6 +170,9 @@ struct Inner {
     output_device: Option<String>,
     /// 0.0 to 2.0; absent means unchanged (1.0).
     output_volume: Option<f32>,
+    /// Per-person volume for this connection, session to gain (0.0 is muted for us). Set
+    /// by the webview, which keeps the settings by name; applied to every new mixer.
+    user_gains: HashMap<u32, f32>,
     /// Virtual-key code of the push-to-talk key, 0 for none. Shared with the task that
     /// reads the key, so a rebind applies without restarting anything.
     ptt_key: Arc<AtomicU32>,
@@ -468,6 +471,7 @@ async fn start_playback<R: Runtime>(
         if let Some(volume) = guard.output_volume {
             mixer.set_volume(volume);
         }
+        mixer.set_session_gains(&guard.user_gains);
         mixer.set_silenced(is_deafened(&guard.full.snapshot));
         guard.mixer = Some(mixer.clone());
     }
@@ -530,6 +534,8 @@ pub async fn mumble_connect<R: Runtime>(
         guard.audio = None;
         guard.playback = None;
         guard.mixer = None;
+        // Sessions belong to a connection; the webview sends the gains again once synced.
+        guard.user_gains.clear();
         guard.generation += 1;
         guard.full = MumbleFullState {
             state: MumbleStatePayload {
@@ -823,6 +829,41 @@ pub async fn mumble_set_output<R: Runtime>(
     };
     if let Some(generation) = reopen {
         open_playback(&app, &inner, generation).await;
+    }
+    Ok(())
+}
+
+#[derive(Debug, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct MumbleUserGain {
+    pub session: u32,
+    /// 0.0 (muted for us) to 2.0.
+    pub gain: f32,
+}
+
+/// Per-person volume, replacing the previous set. Only people whose volume is not 100%
+/// need to be listed. Sessions are per connection, so the webview sends the set again
+/// whenever the people on the server change.
+#[tauri::command]
+pub async fn mumble_set_user_gains(
+    state: State<'_, MumbleState>,
+    gains: Vec<MumbleUserGain>,
+) -> Result<(), String> {
+    let mut guard = state.inner.lock().await;
+    guard.user_gains = gains
+        .into_iter()
+        .filter(|entry| entry.gain.is_finite())
+        .map(|entry| (entry.session, entry.gain.clamp(0.0, 2.0)))
+        .collect();
+    let mut summary: Vec<String> = guard
+        .user_gains
+        .iter()
+        .map(|(session, gain)| format!("{session}={gain:.2}"))
+        .collect();
+    summary.sort_unstable();
+    log::info!("mumble: per-person volume [{}]", summary.join(", "));
+    if let Some(mixer) = &guard.mixer {
+        mixer.set_session_gains(&guard.user_gains);
     }
     Ok(())
 }

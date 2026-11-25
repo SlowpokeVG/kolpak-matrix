@@ -482,6 +482,8 @@ pub fn run() {
             #[cfg(desktop)]
             mumble::mumble_set_self,
             #[cfg(desktop)]
+            mumble::mumble_set_user_gains,
+            #[cfg(desktop)]
             mumble::mumble_set_transmit,
             #[cfg(desktop)]
             mumble::mumble_ptt,

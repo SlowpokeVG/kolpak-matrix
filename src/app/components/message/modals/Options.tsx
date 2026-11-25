@@ -44,6 +44,7 @@ import { useAtom, useSetAtom, useStore } from 'jotai';
 import type { Dispatch, MouseEventHandler, ReactNode, SetStateAction } from 'react';
 import { useCallback, useEffect, useLayoutEffect, useState } from 'react';
 import { MessageDeleteItem } from './MessageDelete';
+import { PososatItem } from '../../../../kolpak/chat/PososatItem';
 import FocusTrap from 'focus-trap-react';
 import { stopPropagation } from '$utils/keyboard';
 import { modalAtom, ModalType, pushModalAtom } from '$state/modal';
@@ -840,6 +841,8 @@ function OptionMenu({
                   </Text>
                 </MenuItem>
               )}
+              {/* Kolpak: "дать пососать" on other people's messages. */}
+              <PososatItem room={room} mEvent={mEvent} onClose={onTotalClose} />
               {canEditEvent(mx, mEvent) && onEditId && !isModal && (
                 <MenuItem
                   size="300"

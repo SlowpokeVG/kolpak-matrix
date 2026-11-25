@@ -137,6 +137,8 @@ impl Speaker {
 /// Everyone we can hear, mixed down to one 48 kHz mono stream.
 pub struct Mixer {
     speakers: Mutex<HashMap<u32, Speaker>>,
+    /// Gain per session, 0.0 (muted for us) to 2.0; anyone not listed plays at 1.0.
+    gains: Mutex<HashMap<u32, f32>>,
     volume: AtomicU32,
     level: AtomicU32,
     /// Set while we are deafened: nothing is played and incoming packets are dropped.
@@ -153,6 +155,7 @@ impl Default for Mixer {
     fn default() -> Self {
         Self {
             speakers: Mutex::new(HashMap::new()),
+            gains: Mutex::new(HashMap::new()),
             volume: AtomicU32::new(1f32.to_bits()),
             level: AtomicU32::new(0f32.to_bits()),
             silenced: AtomicBool::new(false),
@@ -175,6 +178,22 @@ impl Mixer {
     pub fn set_volume(&self, volume: f32) {
         self.volume
             .store(volume.clamp(0.0, 2.0).to_bits(), Ordering::Relaxed);
+    }
+
+    /// Per-person volume, replacing whatever was set before: session to gain, 0.0 (muted
+    /// for us only) to 2.0. Sessions left out play at 1.0.
+    pub fn set_session_gains(&self, gains: &HashMap<u32, f32>) {
+        let mut current = self
+            .gains
+            .lock()
+            .unwrap_or_else(|poison| poison.into_inner());
+        current.clear();
+        current.extend(
+            gains
+                .iter()
+                .map(|(session, gain)| (*session, gain.clamp(0.0, 2.0)))
+                .filter(|(_, gain)| (*gain - 1.0).abs() > f32::EPSILON),
+        );
     }
 
     pub fn set_silenced(&self, silenced: bool) {
@@ -236,6 +255,10 @@ impl Mixer {
     /// Forget speakers who are no longer on the server.
     pub fn retain_sessions(&self, present: &HashSet<u32>) {
         self.lock().retain(|session, _| present.contains(session));
+        self.gains
+            .lock()
+            .unwrap_or_else(|poison| poison.into_inner())
+            .retain(|session, _| present.contains(session));
     }
 
     /// Sessions that are speaking right now.
@@ -257,8 +280,14 @@ impl Mixer {
     pub fn mix(&self, out: &mut [f32]) {
         out.fill(0.0);
         if !self.silenced.load(Ordering::Relaxed) {
+            let gains = self
+                .gains
+                .lock()
+                .unwrap_or_else(|poison| poison.into_inner())
+                .clone();
             let mut speakers = self.lock();
-            for speaker in speakers.values_mut() {
+            for (session, speaker) in speakers.iter_mut() {
+                let gain = gains.get(session).copied().unwrap_or(1.0);
                 if !speaker.playing {
                     if speaker.buffer.len() < PREBUFFER_SAMPLES {
                         continue;
@@ -266,8 +295,9 @@ impl Mixer {
                     speaker.playing = true;
                 }
                 let take = out.len().min(speaker.buffer.len());
+                // Someone muted for us still drains, so unmuting resumes live, not late.
                 for (slot, sample) in out.iter_mut().zip(speaker.buffer.drain(..take)) {
-                    *slot += sample;
+                    *slot += sample * gain;
                 }
                 if speaker.buffer.is_empty() {
                     // Ran dry: wait for the cushion to refill before playing again.
@@ -548,6 +578,38 @@ mod tests {
         mixer.mix(&mut out);
         assert!(out.iter().all(|sample| *sample == 0.0));
         assert!(mixer.talking().is_empty(), "silencing forgets the speakers");
+    }
+
+    #[test]
+    fn per_person_gain_scales_and_mutes_one_speaker() {
+        let mixer = Mixer::new();
+        mixer.push_pcm(1, &vec![0.2; PREBUFFER_SAMPLES * 2], false);
+        mixer.push_pcm(2, &vec![0.1; PREBUFFER_SAMPLES * 2], false);
+        mixer.set_session_gains(&HashMap::from([(1, 0.0), (2, 2.0)]));
+        let mut out = vec![0.0f32; 480];
+        mixer.mix(&mut out);
+        // Session 1 muted for us, session 2 doubled: 0.2 * 0 + 0.1 * 2.
+        assert!(out.iter().all(|sample| (*sample - 0.2).abs() < 1e-6));
+
+        // Gains are clamped, and replacing the set puts everyone left out back at 1.0.
+        mixer.set_session_gains(&HashMap::from([(2, 9.0)]));
+        assert_eq!(mixer.gains.lock().unwrap().get(&2), Some(&2.0));
+        mixer.set_session_gains(&HashMap::new());
+        mixer.mix(&mut out);
+        assert!(out.iter().all(|sample| (*sample - 0.3).abs() < 1e-6));
+    }
+
+    #[test]
+    fn a_muted_speaker_still_drains_and_leaving_forgets_the_gain() {
+        let mixer = Mixer::new();
+        mixer.push_pcm(1, &vec![0.5; PREBUFFER_SAMPLES], false);
+        mixer.set_session_gains(&HashMap::from([(1, 0.0)]));
+        let mut out = vec![0.0f32; PREBUFFER_SAMPLES];
+        mixer.mix(&mut out);
+        assert!(mixer.lock().get(&1).unwrap().buffer.is_empty());
+
+        mixer.retain_sessions(&HashSet::new());
+        assert!(mixer.gains.lock().unwrap().is_empty());
     }
 
     #[test]
