@@ -1,0 +1,80 @@
+/*
+ * Room list pieces that are new Kolpak components (AI/DESIGN.md §3.2): the wordmark and
+ * the "jump to" box. Plain CSS in cascade layers, like the status bar (AI/SPEC.md §8).
+ * The restyling of Sable's own rows lives in ../theme/kolpak-theme.css.
+ */
+/*
+ * Sable's own layers are named first, in Sable's order (src/index.css: sable-reset, then
+ * folds). Module order decides which stylesheet loads first, and whichever loads first fixes
+ * the layer order. Leaving them out puts Sable's element resets above our components;
+ * swapping them puts the resets above folds and breaks its buttons.
+ */
+@layer sable-reset, folds, reset, tokens, base, components, theme, user;
+
+@layer components {
+  .kolpak-wordmark {
+    display: inline-flex;
+    align-items: baseline;
+    gap: 6px;
+    min-width: 0;
+    text-transform: none;
+    letter-spacing: 0;
+    font-synthesis: none;
+    line-height: 1;
+  }
+
+  .kolpak-wordmark__klpq {
+    font-family: 'Rubik Spray Paint', var(--kolpak-font-head, sans-serif);
+    font-size: 34px;
+    font-weight: 400;
+    color: var(--kolpak-orange, var(--sable-primary-main));
+  }
+
+  .kolpak-wordmark__sign {
+    font-family: 'Permanent Marker', cursive;
+    /* 13px in the mockup; 12px here so it fits beside the header's menu button. */
+    font-size: 12px;
+    font-weight: 400;
+    color: var(--kolpak-paper, var(--sable-bg-on-container));
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+
+  .kolpak-jump-to {
+    appearance: none;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 8px;
+    width: 100%;
+    margin: 0;
+    padding: 6px 10px;
+    cursor: pointer;
+
+    background: transparent;
+    border: 2px solid var(--kolpak-line, var(--sable-bg-container-line));
+    color: var(--kolpak-muted, var(--sable-bg-on-container));
+    font-family: var(--kolpak-font-body, var(--font-secondary));
+    font-size: 13px;
+    font-weight: 400;
+    line-height: 1.45;
+    text-align: left;
+  }
+
+  .kolpak-jump-to:hover {
+    border-color: var(--kolpak-paper, var(--sable-bg-on-container));
+    color: var(--kolpak-paper, var(--sable-bg-on-container));
+  }
+
+  .kolpak-jump-to__key {
+    font-size: 11px;
+    text-transform: lowercase;
+    white-space: nowrap;
+  }
+
+  /* The row that holds the box, directly under the room list header. */
+  .kolpak-jump-to-row {
+    flex: none;
+    padding: 0 16px 10px;
+  }
+}

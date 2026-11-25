@@ -1,0 +1,11 @@
+{
+  "productName": "Kolpak Dev",
+  "identifier": "com.klpq.kolpak.dev",
+  "plugins": {
+    "deep-link": {
+      "desktop": {
+        "schemes": ["kolpak-dev"]
+      }
+    }
+  }
+}

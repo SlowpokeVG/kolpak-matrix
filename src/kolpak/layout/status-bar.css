@@ -1,0 +1,58 @@
+/*
+ * Status bar (AI/DESIGN.md §3.5): 34px, full width, paper ground, ink bold 13px.
+ *
+ * New Kolpak components are plain CSS in cascade layers (AI/SPEC.md §8), so that a user's
+ * theme or tweak CSS, which is unlayered, always wins. Outside the Kolpak theme the bar
+ * falls back to the active theme's own colours, inverted.
+ */
+/*
+ * Sable's own layers are named first, in Sable's order (src/index.css: sable-reset, then
+ * folds). Module order decides which stylesheet loads first, and whichever loads first fixes
+ * the layer order. Leaving them out puts Sable's element resets above our components;
+ * swapping them puts the resets above folds and breaks its buttons.
+ */
+@layer sable-reset, folds, reset, tokens, base, components, theme, user;
+
+@layer components {
+  .kolpak-status-bar {
+    flex: none;
+    height: 34px;
+    display: flex;
+    align-items: center;
+    gap: 26px;
+    padding: 0 16px;
+    overflow: hidden;
+    white-space: nowrap;
+
+    background: var(--kolpak-paper, var(--sable-surface-on-container));
+    color: var(--kolpak-ink, var(--sable-surface-container));
+    font-family: var(--kolpak-font-body, var(--font-secondary));
+    font-size: 13px;
+    font-weight: 700;
+    line-height: 1;
+    font-variant-numeric: tabular-nums;
+  }
+
+  .kolpak-status-bar__spacer {
+    flex: 1 1 auto;
+  }
+
+  /* Offline channels and disconnected services are set in regular weight. */
+  .kolpak-status-bar__idle {
+    font-weight: 400;
+  }
+
+  .kolpak-status-bar__live {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+  }
+
+  /* The live dot is the only circle in the design. */
+  .kolpak-status-bar__dot {
+    width: 8px;
+    height: 8px;
+    border-radius: 50%;
+    background: var(--kolpak-orange, var(--sable-primary-main));
+  }
+}

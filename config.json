@@ -1,0 +1,34 @@
+{
+  "productName": "Kolpak",
+  "defaultHomeserver": 0,
+  "homeserverList": ["matrix.klpq.io"],
+  "allowCustomHomeservers": true,
+  "elementCallUrl": null,
+
+  "disableAccountSwitcher": false,
+  "hideUsernamePasswordFields": false,
+
+  "themeCatalogBaseUrl": "https://raw.githubusercontent.com/SableClient/themes/main/",
+  "themeCatalogApprovedHostPrefixes": ["https://raw.githubusercontent.com/SableClient/themes/"],
+
+  "featuredCommunities": {
+    "openAsDefault": false,
+    "spaces": [],
+    "rooms": [],
+    "servers": ["matrix.klpq.io"]
+  },
+
+  "streamStatsUrl": "https://stats-api.klpq.io/v1",
+
+  "settingsDefaults": {
+    "useSystemTheme": false,
+    "themeId": "kolpak-theme",
+    "darkThemeId": "kolpak-theme",
+    "showUnreadCounts": true
+  },
+
+  "hashRouter": {
+    "enabled": false,
+    "basename": "/"
+  }
+}
