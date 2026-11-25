@@ -8,7 +8,7 @@ import * as css from './styles.css';
 export const NavItem = as<'div', { highlight?: boolean } & css.RoomSelectorVariants>(
   ({ as: AsNavItem = 'div', className, highlight, variant, radii, children, ...props }, ref) => (
     <AsNavItem
-      className={classNames(css.NavItem({ variant, radii }), className)}
+      className={classNames(css.NavItem({ variant, radii }), 'kolpak-nav-item', className)}
       data-highlight={highlight}
       {...props}
       ref={ref}

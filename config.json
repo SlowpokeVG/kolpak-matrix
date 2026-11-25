@@ -18,6 +18,12 @@
     "servers": ["matrix.klpq.io"]
   },
 
+  "settingsDefaults": {
+    "useSystemTheme": false,
+    "themeId": "kolpak-theme",
+    "darkThemeId": "kolpak-theme"
+  },
+
   "hashRouter": {
     "enabled": false,
     "basename": "/"

@@ -9,7 +9,12 @@ import * as css from './Sidebar.css';
 const SidebarItemBottom = as<'div', css.SidebarItemVariants>(
   ({ as: AsSidebarAvatarBox = 'div', className, active, ...props }, ref) => (
     <AsSidebarAvatarBox
-      className={classNames(css.SidebarItemBottom({ active }), className)}
+      className={classNames(
+        css.SidebarItemBottom({ active }),
+        'kolpak-rail-item-bottom',
+        className
+      )}
+      data-active={active ? 'true' : undefined}
       {...props}
       ref={ref}
     />
@@ -19,7 +24,8 @@ const SidebarItemBottom = as<'div', css.SidebarItemVariants>(
 export const SidebarItemLeft = as<'div', css.SidebarItemVariants>(
   ({ as: AsSidebarAvatarBox = 'div', className, active, ...props }, ref) => (
     <AsSidebarAvatarBox
-      className={classNames(css.SidebarItem({ active }), className)}
+      className={classNames(css.SidebarItem({ active }), 'kolpak-rail-item', className)}
+      data-active={active ? 'true' : undefined}
       {...props}
       ref={ref}
     />

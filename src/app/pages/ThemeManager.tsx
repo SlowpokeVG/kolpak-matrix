@@ -1,14 +1,7 @@
 import type { ReactNode } from 'react';
 import { useCallback, useEffect, useMemo, useRef } from 'react';
 import { configClass, varsClass } from 'folds';
-import {
-  DarkTheme,
-  LightTheme,
-  ThemeContextProvider,
-  ThemeKind,
-  useActiveTheme,
-  useSystemThemeKind,
-} from '$hooks/useTheme';
+import { KolpakTheme, ThemeContextProvider, ThemeKind, useActiveTheme } from '$hooks/useTheme';
 import { ArboriumThemeBridge } from '$plugins/arborium';
 import { useSetting } from '$state/hooks/settings';
 import { settingsAtom } from '$state/settings';
@@ -117,20 +110,14 @@ function CatalogThemeAutoUpdater() {
 }
 
 export function UnAuthRouteThemeManager() {
-  const systemThemeKind = useSystemThemeKind();
-
+  // Kolpak: the login screens always wear the Kolpak theme, whatever the system prefers.
   useEffect(() => {
     document.body.className = '';
     document.body.classList.add(configClass, varsClass);
-    if (systemThemeKind === ThemeKind.Dark) {
-      document.body.classList.add(...DarkTheme.classNames);
-    }
-    if (systemThemeKind === ThemeKind.Light) {
-      document.body.classList.add(...LightTheme.classNames);
-    }
-  }, [systemThemeKind]);
+    document.body.classList.add(...KolpakTheme.classNames);
+  }, []);
 
-  return <ArboriumThemeBridge kind={systemThemeKind} />;
+  return <ArboriumThemeBridge kind={ThemeKind.Dark} />;
 }
 
 export function AuthRouteThemeManager({ children }: { children: ReactNode }) {

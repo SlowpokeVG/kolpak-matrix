@@ -218,8 +218,9 @@ const MemoizedTimelineItem = memo(
         )}
         {eventData.willRenderNewDivider && (
           <MessageBase space={messageSpacing}>
-            <TimelineDivider style={{ color: color.Success.Main }} variant="Inherit">
-              <Badge as="span" size="500" variant="Success" fill="Solid" radii="300">
+            {/* Kolpak: unread is the primary (orange) colour; green is kept for voice and presence. */}
+            <TimelineDivider style={{ color: color.Primary.Main }} variant="Inherit">
+              <Badge as="span" size="500" variant="Primary" fill="Solid" radii="300">
                 <Text size="L400">New Messages</Text>
               </Badge>
             </TimelineDivider>

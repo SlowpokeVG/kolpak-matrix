@@ -4,6 +4,7 @@ import { matchPath, useLocation } from 'react-router';
 import { ScreenSize, useScreenSizeContext } from '$hooks/useScreenSize';
 import { SETTINGS_PATH } from '../paths';
 import { isShallowRoute } from './shallowRoute';
+import { StatusBar } from '../../../kolpak/layout/StatusBar';
 
 type ClientLayoutProps = {
   nav: ReactNode;
@@ -19,11 +20,15 @@ export function ClientLayout({ nav, children }: ClientLayoutProps) {
   const railInDrawer = screenSize === ScreenSize.Mobile;
 
   return (
-    <Box grow="Yes" direction="Row">
-      {!fullPageSettings && !railInDrawer && <Box shrink="No">{nav}</Box>}
-      <Box grow="Yes" style={{ minWidth: 0 }}>
-        {children}
+    // Kolpak: the status bar runs under everything on desktop (AI/DESIGN.md §3.5).
+    <Box grow="Yes" direction="Column" style={{ minHeight: 0 }}>
+      <Box grow="Yes" direction="Row" style={{ minHeight: 0 }}>
+        {!fullPageSettings && !railInDrawer && <Box shrink="No">{nav}</Box>}
+        <Box grow="Yes" style={{ minWidth: 0 }}>
+          {children}
+        </Box>
       </Box>
+      {!railInDrawer && <StatusBar />}
     </Box>
   );
 }

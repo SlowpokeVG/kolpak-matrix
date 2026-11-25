@@ -2,7 +2,8 @@ import { REMOTE_THEME_ID } from '$hooks/useTheme';
 import type { Settings } from '$state/settings';
 import { trimTrailingSlash } from '$utils/common';
 
-const BUILTIN_THEME_IDS = new Set(['light-theme', 'dark-theme']);
+// Kolpak: 'kolpak-theme' is built in (src/kolpak/theme), not a legacy theme to migrate.
+const BUILTIN_THEME_IDS = new Set(['light-theme', 'dark-theme', 'kolpak-theme']);
 
 export function isLegacyThemeId(themeId: string | undefined): boolean {
   if (!themeId || themeId.trim() === '') return false;

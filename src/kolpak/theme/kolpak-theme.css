@@ -1,0 +1,227 @@
+/*
+ * Kolpak built-in theme. See AI/DESIGN.md §2 for the tokens and rules.
+ *
+ * It works the way any Sable theme does: it sets the --sable-* custom properties that the
+ * inherited UI reads. What those variables cannot reach (hard edges, no shadows, fonts) is
+ * in the second half of this file, scoped to .kolpak-theme so other themes are unaffected.
+ */
+
+.dark-theme.kolpak-theme {
+  /* Brand tokens (DESIGN §2.3). New Kolpak components should read these. */
+  --kolpak-black: #0b0b0c;
+  --kolpak-panel: #1a1a1c;
+  --kolpak-line: #3a3a3d;
+  --kolpak-paper: #edebe4;
+  --kolpak-ink: #111111;
+  --kolpak-muted: #9a9a9e;
+  --kolpak-dim: #6a6a6e;
+  --kolpak-orange: #ff4a1c;
+  --kolpak-blue: #2b4bff;
+  --kolpak-green: #b6f02a;
+
+  /* Hover and pressed steps for solid fills; there are no tints in this theme. */
+  --kolpak-panel-hover: #252528;
+  --kolpak-panel-active: #303033;
+  --kolpak-orange-hover: #ff6238;
+  --kolpak-orange-active: #e63e12;
+  --kolpak-paper-hover: #ffffff;
+  --kolpak-paper-active: #d6d4cc;
+  --kolpak-green-hover: #c6f754;
+  --kolpak-green-active: #a2d91f;
+
+  /* Anton has no Cyrillic; Oswald 700 covers it (DESIGN §2.4, pending the owner's choice). */
+  --kolpak-font-head: 'Anton', 'Oswald Variable', Impact, sans-serif;
+  --kolpak-font-body: 'JetBrains Mono Variable', var(--font-emoji), monospace;
+
+  --font-secondary: var(--kolpak-font-body);
+  --font-monospace: var(--kolpak-font-body);
+
+  /* Background: room list and other side panels */
+  --sable-bg-container: var(--kolpak-panel);
+  --sable-bg-container-hover: var(--kolpak-panel-hover);
+  --sable-bg-container-active: var(--kolpak-panel-active);
+  --sable-bg-container-line: var(--kolpak-line);
+  --sable-bg-on-container: var(--kolpak-paper);
+
+  /* Surface: the chat column */
+  --sable-surface-container: var(--kolpak-black);
+  --sable-surface-container-hover: var(--kolpak-panel);
+  --sable-surface-container-active: var(--kolpak-panel-hover);
+  --sable-surface-container-line: var(--kolpak-line);
+  --sable-surface-on-container: var(--kolpak-paper);
+
+  /* Surface variant: cards, embeds, inputs, menus */
+  --sable-surface-var-container: var(--kolpak-panel);
+  --sable-surface-var-container-hover: var(--kolpak-panel-hover);
+  --sable-surface-var-container-active: var(--kolpak-panel-active);
+  --sable-surface-var-container-line: var(--kolpak-line);
+  --sable-surface-var-on-container: var(--kolpak-paper);
+
+  /* Primary: orange. Live, unread, primary action. */
+  --sable-primary-main: var(--kolpak-orange);
+  --sable-primary-main-hover: var(--kolpak-orange-hover);
+  --sable-primary-main-active: var(--kolpak-orange-active);
+  --sable-primary-main-line: var(--kolpak-orange);
+  --sable-primary-on-main: var(--kolpak-ink);
+  --sable-primary-container: var(--kolpak-panel);
+  --sable-primary-container-hover: var(--kolpak-panel-hover);
+  --sable-primary-container-active: var(--kolpak-panel-active);
+  --sable-primary-container-line: var(--kolpak-orange);
+  --sable-primary-on-container: var(--kolpak-orange);
+
+  /* Secondary: paper. Selection is an inverted block, paper fill with ink text. */
+  --sable-sec-main: var(--kolpak-paper);
+  --sable-sec-main-hover: var(--kolpak-paper-hover);
+  --sable-sec-main-active: var(--kolpak-paper-active);
+  --sable-sec-main-line: var(--kolpak-paper);
+  --sable-sec-on-main: var(--kolpak-ink);
+  --sable-sec-container: var(--kolpak-panel);
+  --sable-sec-container-hover: var(--kolpak-panel-hover);
+  --sable-sec-container-active: var(--kolpak-panel-active);
+  --sable-sec-container-line: var(--kolpak-line);
+  --sable-sec-on-container: var(--kolpak-paper);
+
+  /* Success: green. Voice and presence. */
+  --sable-success-main: var(--kolpak-green);
+  --sable-success-main-hover: var(--kolpak-green-hover);
+  --sable-success-main-active: var(--kolpak-green-active);
+  --sable-success-main-line: var(--kolpak-green);
+  --sable-success-on-main: var(--kolpak-ink);
+  --sable-success-container: var(--kolpak-panel);
+  --sable-success-container-hover: var(--kolpak-panel-hover);
+  --sable-success-container-active: var(--kolpak-panel-active);
+  --sable-success-container-line: var(--kolpak-green);
+  --sable-success-on-container: var(--kolpak-green);
+
+  /*
+   * Warning and critical. The palette has no yellow or red, and the design does not define
+   * error states yet (DESIGN §8.3). Both use orange, "needs attention", until it does.
+   */
+  --sable-warn-main: var(--kolpak-orange);
+  --sable-warn-main-hover: var(--kolpak-orange-hover);
+  --sable-warn-main-active: var(--kolpak-orange-active);
+  --sable-warn-main-line: var(--kolpak-orange);
+  --sable-warn-on-main: var(--kolpak-ink);
+  --sable-warn-container: var(--kolpak-panel);
+  --sable-warn-container-hover: var(--kolpak-panel-hover);
+  --sable-warn-container-active: var(--kolpak-panel-active);
+  --sable-warn-container-line: var(--kolpak-orange);
+  --sable-warn-on-container: var(--kolpak-orange);
+
+  --sable-crit-main: var(--kolpak-orange);
+  --sable-crit-main-hover: var(--kolpak-orange-hover);
+  --sable-crit-main-active: var(--kolpak-orange-active);
+  --sable-crit-main-line: var(--kolpak-orange);
+  --sable-crit-on-main: var(--kolpak-ink);
+  --sable-crit-container: var(--kolpak-panel);
+  --sable-crit-container-hover: var(--kolpak-panel-hover);
+  --sable-crit-container-active: var(--kolpak-panel-active);
+  --sable-crit-container-line: var(--kolpak-orange);
+  --sable-crit-on-container: var(--kolpak-orange);
+
+  /* Focus is a solid orange outline; no shadows; the modal overlay is opaque. */
+  --sable-focus-ring: var(--kolpak-orange);
+  --sable-shadow: transparent;
+  --sable-overlay: var(--kolpak-black);
+
+  --tc-link: var(--kolpak-orange);
+
+  /* Names are paper. Orange and green carry meaning and are not spent on decoration. */
+  --mx-uc-1: var(--kolpak-paper);
+  --mx-uc-2: var(--kolpak-paper);
+  --mx-uc-3: var(--kolpak-paper);
+  --mx-uc-4: var(--kolpak-paper);
+  --mx-uc-5: var(--kolpak-paper);
+  --mx-uc-6: var(--kolpak-paper);
+  --mx-uc-7: var(--kolpak-paper);
+  --mx-uc-8: var(--kolpak-paper);
+}
+
+/*
+ * Style rules the variables cannot express (DESIGN §2.5): hard edges and solid fills.
+ * Radii from folds are zeroed through its own variables in kolpakTheme.css.ts; this catches
+ * the hardcoded ones. Add .kolpak-round to the few things that stay round (the live dot).
+ */
+.kolpak-theme *:not(.kolpak-round),
+.kolpak-theme *:not(.kolpak-round)::before,
+.kolpak-theme *:not(.kolpak-round)::after {
+  border-radius: 0 !important;
+}
+
+.kolpak-theme,
+.kolpak-theme *,
+.kolpak-theme *::before,
+.kolpak-theme *::after {
+  box-shadow: none !important;
+  text-shadow: none !important;
+  backdrop-filter: none !important;
+}
+
+.kolpak-theme :focus-visible {
+  outline: 2px solid var(--kolpak-orange);
+  outline-offset: 2px;
+}
+
+/*
+ * Header face for titles, section labels and buttons (DESIGN §2.4).
+ * The selectors are the size variants of the folds Text component (D400, H1 to H6, the three
+ * button sizes, and L400 labels). They are generated names, stable for the pinned folds 2.7.1;
+ * re-check them if folds is ever upgraded.
+ * Anton ships one weight. `font-synthesis: none` stops the browser from faking a bold Anton
+ * while still letting the Oswald fallback render Cyrillic at 700.
+ */
+.kolpak-theme
+  :is(
+    ._1xny9xl2,
+    ._1xny9xl3,
+    ._1xny9xl4,
+    ._1xny9xl5,
+    ._1xny9xl6,
+    ._1xny9xl7,
+    ._1xny9xl8,
+    ._1xny9xld,
+    ._1xny9xle,
+    ._1xny9xlf,
+    ._1xny9xlg
+  ) {
+  font-family: var(--kolpak-font-head);
+  font-weight: 700;
+  font-synthesis: none;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+}
+
+/*
+ * Layout shell (DESIGN §3). The hooks are plain class names added to Sable's components:
+ * .kolpak-space-rail (Sidebar), .kolpak-rail-item (SidebarItem), .kolpak-nav-item (NavItem).
+ */
+
+/* Space rail: black ground with a 2px panel rule (§3.1). */
+.kolpak-theme .kolpak-space-rail {
+  background-color: var(--kolpak-black);
+  border-right: 2px solid var(--kolpak-panel);
+}
+
+/* The active space is marked by a 4x32 orange bar to the left of its tile. */
+.kolpak-theme .kolpak-rail-item::before {
+  width: 4px;
+  background: var(--kolpak-orange);
+}
+.kolpak-theme .kolpak-rail-item[data-active='true']::before {
+  height: 32px;
+}
+.kolpak-theme .kolpak-rail-item-bottom::before {
+  height: 4px;
+  background: var(--kolpak-orange);
+}
+
+/* Selection is an inverted block: paper fill, ink text, bold (§2.3, §3.2). */
+.kolpak-theme .kolpak-nav-item[aria-selected='true'],
+.kolpak-theme .kolpak-nav-item[aria-selected='true']:hover {
+  background-color: var(--kolpak-paper);
+  color: var(--kolpak-ink);
+  font-weight: 700;
+}
+.kolpak-theme .kolpak-nav-item[aria-selected='true'] * {
+  font-weight: 700;
+}

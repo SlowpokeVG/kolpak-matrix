@@ -16,6 +16,7 @@ import { getCspNonce } from './app/utils/cspNonce';
 
 import './index.css';
 import './app/styles/themes.css';
+import './kolpak/theme';
 import './app/styles/overrides/General.css';
 import './app/styles/overrides/Privacy.css';
 import './app/styles/overrides/TauriDesktop.css';

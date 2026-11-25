@@ -194,6 +194,43 @@ Still Sable's, on purpose or pending a decision:
 
 **Not done yet in Spike 1:** release build size and memory; the open rebrand items above; E2EE check; other OSes and Android.
 
+## Design log
+
+### 2026-11-25 — Kolpak theme, first pass
+
+Step 5 of "Next steps" was started ahead of the Mumble and stream spikes because those are blocked on server details. The Kolpak look now applies to the whole inherited UI as a built-in theme; no layout has changed yet.
+
+- `src/kolpak/theme/kolpak-theme.css`: the DESIGN §2.3 tokens as `--kolpak-*` variables, mapped onto all of Sable's `--sable-*` variables under `.dark-theme.kolpak-theme`; then the rules variables cannot express, scoped to `.kolpak-theme`: radius 0, no shadows or blur, orange focus outline, and the header face on the folds Text heading, label and button sizes.
+- `src/kolpak/theme/kolpakTheme.css.ts`: zeroes the folds radius variables through its theme contract.
+- `src/kolpak/theme/index.ts`: bundles the fonts (new dependencies `@fontsource/anton`, `@fontsource-variable/oswald`, `@fontsource-variable/jetbrains-mono`) and exports the theme ID.
+- Touch points in Sable's files: `src/index.tsx` (one import), `src/app/hooks/useTheme.ts` (registers `KolpakTheme`, listed first), `src/app/pages/ThemeManager.tsx` (login screens always use Kolpak instead of following the system theme), `src/app/theme/legacyToCatalogMap.ts` (`kolpak-theme` counts as built in; without this Sable shows its "Update your theme selection" migration dialog), and `config.json` → `settingsDefaults` (Kolpak is the default theme, system-theme following off). Light and Dark remain selectable, and user themes and tweaks still load on top.
+
+Checked in the running app and by screenshot: chat view, member list, settings, a dialog and the login page. Typecheck, lint and the theme, hooks, settings and state tests pass (one ThemeManager test was rewritten for the login-screen change).
+
+Choices made here that the design does not settle, for the owner to confirm:
+
+- **Header font:** the stack is `Anton, Oswald, Impact`, i.e. the DESIGN §2.4 proposal (Anton for Latin, Oswald 700 for Cyrillic). Both are bundled, so switching to Oswald throughout is a one-line change.
+- **Which surface is which:** Sable's "background" (room list, side panels, space rail) is `--panel`, "surface" (chat column) is `--black`. The design wants the space rail black; that needs the layout pass.
+- **Warning and error colours:** both orange. The palette has no red or yellow and DESIGN §8.3 leaves error states undefined.
+- **Modal overlay:** opaque black, following "no transparency". It hides the page behind dialogs completely.
+- **Links:** orange.
+
+Known gaps against DESIGN, all for the layout and component pass: selected rows are a shade lighter instead of an inverted paper block; the "new messages" divider is green where the design reserves green for voice and presence; user names keep Sable's per-user colours and fallback avatars keep pastel fills; toggles and checkboxes are only squared off, not redrawn; base text size is Sable's (16px) rather than the 14px in the mockups. The header selectors use folds' generated class names, which are stable for the pinned folds 2.7.1 and must be re-checked if folds changes.
+
+### 2026-11-25 — layout pass 1: status bar, space rail, selection, type scale
+
+Verified by screenshot in the running app; typecheck, lint, format and 656 tests pass (three new ones for the status bar).
+
+- **Status bar** (DESIGN §3.5): `src/kolpak/layout/StatusBar.tsx` and `status-bar.css`, mounted from `src/app/pages/client/ClientLayout.tsx` under the whole client on desktop, hidden on mobile. 34px, paper ground, ink bold 13px. It shows a 24-hour clock and takes `streams` and `voice` props; with neither service built yet it renders "streams --" and "voice --". This is the first component written the SPEC §8 way: plain CSS in `@layer components`, with fallbacks to the active theme's colours outside the Kolpak theme.
+- **Space rail** (§3.1): black with a 2px panel rule; the active item is marked by a 4×32 orange bar.
+- **Selection** (§2.3): the selected room-list row is an inverted block, paper fill with bold ink text.
+- **Type scale** (§2.4): `kolpakFontSize` in `src/kolpak/theme/kolpakTheme.css.ts` overrides the folds size variables: 14px body, 13px secondary, 12px meta, 11px badges, 15px section labels, 15–17px buttons.
+- **Unread divider**: the "New Messages" marker in `src/app/features/room/RoomTimeline.tsx` uses the primary colour instead of success, so it is orange under Kolpak and green stays for voice and presence. This also changes it in Sable's own Light and Dark themes.
+
+Hooks added to Sable's components so the theme has stable selectors (generated class names differ between dev and production builds): class `kolpak-space-rail` in `Sidebar.tsx`, `kolpak-rail-item` / `kolpak-rail-item-bottom` plus `data-active` in `SidebarItem.tsx`, `kolpak-nav-item` in `NavItem.tsx`. Each is a one- or two-line change.
+
+Still open in the layout: active space tile as a paper block; two-letter Anton initials on space tiles; wordmark and "jump to" box at the top of the room list; ROOMS / PEOPLE sections as plain text rows with orange count blocks; own-avatar footer; room header at 46px; message spacing (Sable's default is looser than the mockup's 14px, and is a user setting); composer with the orange cursor; the live dock; theater mode. User names and fallback avatars still use Sable's colours.
+
 ## Starting a new Claude session on this
 
 Open the session in a local clone of this repo and say something like:

@@ -4,6 +4,7 @@ import { useSetting } from '$state/hooks/settings';
 import { isLocalImportThemeUrl } from '../theme/localImportUrls';
 import { onDarkFontWeight, onLightFontWeight } from '../../config.css';
 import { darkTheme, lightTheme } from '../../colors.css';
+import { KOLPAK_THEME_ID, kolpakFontSize, kolpakRadii } from '../../kolpak/theme';
 
 export enum ThemeKind {
   Light = 'light',
@@ -56,8 +57,16 @@ export const DarkTheme: Theme = {
   classNames: ['sable-remote-theme', 'dark-theme', darkTheme, onDarkFontWeight],
 };
 
+// Kolpak: the default look. A dark theme that overrides the --sable-* variables
+// (src/kolpak/theme/kolpak-theme.css) and zeroes the folds radii.
+export const KolpakTheme: Theme = {
+  id: KOLPAK_THEME_ID,
+  kind: ThemeKind.Dark,
+  classNames: [...DarkTheme.classNames, KOLPAK_THEME_ID, kolpakRadii, kolpakFontSize],
+};
+
 export const useThemes = (): Theme[] => {
-  const themes: Theme[] = useMemo(() => [LightTheme, DarkTheme], []);
+  const themes: Theme[] = useMemo(() => [KolpakTheme, LightTheme, DarkTheme], []);
 
   return themes;
 };
@@ -65,6 +74,7 @@ export const useThemes = (): Theme[] => {
 export const useThemeNames = (): Record<string, string> =>
   useMemo(
     () => ({
+      [KolpakTheme.id]: 'Kolpak',
       [LightTheme.id]: 'Light',
       [DarkTheme.id]: 'Dark',
     }),
