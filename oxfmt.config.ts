@@ -20,5 +20,8 @@ export default {
     'README.md',
     'CHANGELOG.md',
     './changeset',
+    // Kolpak's notes, design sources and the OBS progress widget: not app code, and the
+    // mockups are exports from the design canvas that must stay byte for byte.
+    'AI',
   ],
 } satisfies OxfmtConfig;
