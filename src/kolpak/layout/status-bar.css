@@ -5,7 +5,13 @@
  * theme or tweak CSS, which is unlayered, always wins. Outside the Kolpak theme the bar
  * falls back to the active theme's own colours, inverted.
  */
-@layer reset, tokens, base, components, theme, user;
+/*
+ * Sable's own layers are named first, in Sable's order (src/index.css: sable-reset, then
+ * folds). Module order decides which stylesheet loads first, and whichever loads first fixes
+ * the layer order. Leaving them out puts Sable's element resets above our components;
+ * swapping them puts the resets above folds and breaks its buttons.
+ */
+@layer sable-reset, folds, reset, tokens, base, components, theme, user;
 
 @layer components {
   .kolpak-status-bar {

@@ -86,7 +86,7 @@ describe('KeyboardShortcuts', () => {
     expect(screen.getByText('Ctrl+Shift+S')).toBeInTheDocument();
     expect(
       screen.getByText(
-        'Shortcuts in the Global section work system-wide, even when Sable is not focused.'
+        'Shortcuts in the Global section work system-wide, even when Kolpak is not focused.'
       )
     ).toBeInTheDocument();
     const headings = screen.getAllByRole('heading', { level: 2 }).map((h) => h.textContent);

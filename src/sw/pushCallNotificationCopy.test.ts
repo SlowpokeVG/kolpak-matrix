@@ -11,7 +11,7 @@ describe('resolveCallNotificationCopy', () => {
       })
     ).toEqual({
       title: 'Room call started',
-      body: 'Open Sable to join.',
+      body: 'Open Kolpak to join.',
     });
   });
 

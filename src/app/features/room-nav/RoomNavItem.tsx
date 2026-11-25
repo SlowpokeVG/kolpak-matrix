@@ -465,6 +465,9 @@ export function RoomNavItem({
           radii="400"
           highlight={shouldShowUnreadIndicator}
           aria-selected={selected}
+          data-kolpak-row={direct ? 'dm' : 'room'}
+          data-muted={isMutedRoom ? 'true' : undefined}
+          data-collapsed={hideText ? 'true' : undefined}
           data-hover={!!menu.anchor || menu.isPressing}
           onContextMenu={contextMenuHandler}
           {...hoverProps}
@@ -513,6 +516,7 @@ export function RoomNavItem({
                     style={hideTextStyling(hideText)}
                   >
                     <AvatarPresence
+                      className="kolpak-nav-avatar"
                       badge={
                         presence &&
                         presence.presence !== Presence.Offline && (

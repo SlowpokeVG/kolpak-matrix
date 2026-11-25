@@ -91,6 +91,7 @@ export function UnreadBadge({ highlight, count, dm, estimated, mode }: UnreadBad
 
   return (
     <Badge
+      className="kolpak-unread-badge"
       variant={highlight ? 'Success' : 'Secondary'}
       size={resolvedMode === 'count' ? '400' : '200'}
       fill="Solid"

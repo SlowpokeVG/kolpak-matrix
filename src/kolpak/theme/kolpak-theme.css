@@ -225,3 +225,54 @@
 .kolpak-theme .kolpak-nav-item[aria-selected='true'] * {
   font-weight: 700;
 }
+
+/*
+ * Room list rows (DESIGN §3.2): plain text, no icons.
+ * Hooks set in RoomNavItem: data-kolpak-row="room|dm", data-muted, data-collapsed;
+ * .kolpak-nav-avatar on the row's avatar; .kolpak-unread-badge on the count;
+ * .kolpak-nav-category on section headers.
+ */
+.kolpak-theme .kolpak-nav-item:not([data-collapsed]) {
+  min-height: 30px;
+  height: 30px;
+}
+
+/* Rooms are text only. People keep their avatars until the presence square is built. */
+.kolpak-theme .kolpak-nav-item[data-kolpak-row='room']:not([data-collapsed]) .kolpak-nav-avatar {
+  display: none;
+}
+
+/* read: regular · unread: bold · muted: muted colour */
+.kolpak-theme .kolpak-nav-item[data-kolpak-row] * {
+  font-weight: 400;
+}
+.kolpak-theme .kolpak-nav-item[data-kolpak-row][data-highlight='true'] *,
+.kolpak-theme .kolpak-nav-item[data-kolpak-row][aria-selected='true'] * {
+  font-weight: 700;
+}
+.kolpak-theme .kolpak-nav-item[data-muted='true']:not([aria-selected='true']) {
+  color: var(--kolpak-muted);
+}
+
+/* Unread count: an orange block with ink mono 11px bold (§3.1, §5). */
+.kolpak-theme .kolpak-unread-badge {
+  background-color: var(--kolpak-orange);
+  color: var(--kolpak-ink);
+  padding: 0 6px;
+}
+.kolpak-theme .kolpak-unread-badge * {
+  font-family: var(--kolpak-font-body);
+  font-size: 11px;
+  font-weight: 700 !important;
+  letter-spacing: 0;
+  line-height: 16px;
+}
+
+/* Section labels: Anton 15, wider tracking, muted (§3.2, §5). */
+.kolpak-theme .kolpak-nav-category,
+.kolpak-theme .kolpak-nav-category button {
+  color: var(--kolpak-muted);
+}
+.kolpak-theme .kolpak-nav-category * {
+  letter-spacing: 0.08em;
+}

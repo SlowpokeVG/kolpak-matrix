@@ -9,7 +9,7 @@ type NavCategoryHeaderProps = {
 export const NavCategoryHeader = as<'div', NavCategoryHeaderProps>(
   ({ className, ...props }, ref) => (
     <Header
-      className={classNames(css.NavCategoryHeader, className)}
+      className={classNames(css.NavCategoryHeader, 'kolpak-nav-category', className)}
       variant="Background"
       size="300"
       {...props}

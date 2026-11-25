@@ -75,8 +75,8 @@ The owner asked for three changes to the main client mockup:
 ## Blocked on the owner
 
 - Matrix: homeserver URL, two test accounts, a test space.
-- Mumble: host, port, version, test channel, password/cert policy.
-- Streams: protocols, example URL, channel list, status API.
+- Mumble: ~~host, port, version~~ (received and probed 2026-11-25, see SPEC §5.1); still needed: test channel, password/cert policy.
+- Streams: ~~protocols, example URL, channel list, status API~~ (read from the station site and the live API on 2026-11-25, see SPEC §6).
 - App display name and bundle ID (suggested `com.klpq.kolpak`); public or private repo.
 - Confirmation of the last design iteration; community slang for UI copy; UI language(s).
 - Whether the repo is public (AGPL requires source for anything distributed).
@@ -230,6 +230,24 @@ Verified by screenshot in the running app; typecheck, lint, format and 656 tests
 Hooks added to Sable's components so the theme has stable selectors (generated class names differ between dev and production builds): class `kolpak-space-rail` in `Sidebar.tsx`, `kolpak-rail-item` / `kolpak-rail-item-bottom` plus `data-active` in `SidebarItem.tsx`, `kolpak-nav-item` in `NavItem.tsx`. Each is a one- or two-line change.
 
 Still open in the layout: active space tile as a paper block; two-letter Anton initials on space tiles; wordmark and "jump to" box at the top of the room list; ROOMS / PEOPLE sections as plain text rows with orange count blocks; own-avatar footer; room header at 46px; message spacing (Sable's default is looser than the mockup's 14px, and is a user setting); composer with the orange cursor; the live dock; theater mode. User names and fallback avatars still use Sable's colours.
+
+### 2026-11-25 — layout pass 2: room list, live status bar
+
+Verified in the running app by screenshot and by clicking through. Typecheck, lint and format pass.
+
+- **Wordmark** (DESIGN §2.2): `src/kolpak/layout/Wordmark.tsx` replaces the "Home" title in the Home room list. "KLPQ" in Rubik Spray Paint, "Podkolpakom" in Permanent Marker, both bundled. The signature is 12px rather than the mockup's 13px so it fits beside the header's menu button.
+- **"jump to" box** (§3.2): `JumpTo.tsx`, rendered under the header by `PageNavHeaderWithMenu` (Home and Direct lists). It opens Sable's existing room search and shows its shortcut. Space lists use a different header and do not have the box yet.
+- **Rows** (§3.2): rooms are plain text at 30px with no icon, regular when read, bold when unread, muted colour when muted; section labels are muted. People rows keep their avatars. Unread counts are orange blocks, and `showUnreadCounts` defaults to on (`config.json` → `settingsDefaults`).
+- **Status bar is live:** `ClientStatusBar.tsx` feeds it from the stream stats API through `src/kolpak/streams`. It lists every channel the API knows, on-air ones first with a dot and viewer count. Details of the API are in SPEC §6.
+- **Cascade layers:** Kolpak component CSS now declares `@layer sable-reset, folds, reset, tokens, base, components, theme, user;`. Sable's two layers must be named first and in that order. Omitting them lets Sable's `button` reset beat our components (whichever stylesheet loads first fixes the order); naming them the other way round breaks folds' own buttons. Both mistakes were made and seen here.
+
+New hooks in Sable's files: `data-kolpak-row`, `data-muted`, `data-collapsed` and class `kolpak-nav-avatar` in `RoomNavItem.tsx`; class `kolpak-unread-badge` in `UnreadBadge.tsx`; class `kolpak-nav-category` in `NavCategoryHeader.tsx`; `title` accepts a node in `PageNavHeaderWithMenu.tsx`; `streamStatsUrl` in the client config type.
+
+**Tests.** The whole suite was run for the first time: 3,164 tests. It found five tests still expecting the word "Sable" after the rebrand (fixed), and 13 failures in `src/app/utils/mediaCache.test.ts` and `mediaTransport.test.ts` with `object.stream is not a function`. Those files and the code they test are untouched by us; the likely cause is this machine's Node 22 where the repo wants 24. Not confirmed. Everything else passes.
+
+**Inputs received from the owner today:** the stream service source (`klpq/klpq-angular`) and the Mumble address `mumble.klpq.io:64738`. Both spikes are unblocked: SPEC §5.1 has the server version, SPEC §6 the stream API. Still unknown for Mumble: test channel, and whether a server password or registered certificates are in use.
+
+Still open in the room list: the box on space lists; the four Home actions (Create Room and so on) that the mockup does not show; PEOPLE rows with the presence square instead of avatars; the own-avatar footer with a 2px rule; column width 222px.
 
 ## Starting a new Claude session on this
 

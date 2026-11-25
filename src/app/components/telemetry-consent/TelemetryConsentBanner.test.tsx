@@ -51,8 +51,8 @@ describe('TelemetryConsentBanner', () => {
   it('renders the banner when DSN is configured and no preference is saved', () => {
     vi.stubEnv('VITE_SENTRY_DSN', TEST_DSN);
     renderTestBanner();
-    expect(screen.getByRole('region', { name: /help improve sable/i })).toBeInTheDocument();
-    expect(screen.getByText(/help improve sable/i)).toBeInTheDocument();
+    expect(screen.getByRole('region', { name: /help improve kolpak/i })).toBeInTheDocument();
+    expect(screen.getByText(/help improve kolpak/i)).toBeInTheDocument();
   });
 
   // ── accessibility ─────────────────────────────────────────────────────────

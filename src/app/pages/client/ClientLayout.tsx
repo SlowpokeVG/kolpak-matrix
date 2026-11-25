@@ -4,7 +4,7 @@ import { matchPath, useLocation } from 'react-router';
 import { ScreenSize, useScreenSizeContext } from '$hooks/useScreenSize';
 import { SETTINGS_PATH } from '../paths';
 import { isShallowRoute } from './shallowRoute';
-import { StatusBar } from '../../../kolpak/layout/StatusBar';
+import { ClientStatusBar } from '../../../kolpak/layout/ClientStatusBar';
 
 type ClientLayoutProps = {
   nav: ReactNode;
@@ -28,7 +28,7 @@ export function ClientLayout({ nav, children }: ClientLayoutProps) {
           {children}
         </Box>
       </Box>
-      {!railInDrawer && <StatusBar />}
+      {!railInDrawer && <ClientStatusBar />}
     </Box>
   );
 }

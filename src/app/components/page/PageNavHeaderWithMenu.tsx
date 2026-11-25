@@ -4,10 +4,11 @@ import { Box, IconButton, Text } from 'folds';
 import { composerIcon, DotsThreeOutlineVerticalIcon } from '$components/icons/phosphor';
 import { PageNavHeader } from '$components/page';
 import { ResponsiveMenu } from '$components/ResponsiveMenu';
+import { JumpTo } from '../../../kolpak/layout/JumpTo';
 
 type PageNavHeaderWithMenuProps = {
   hideText?: boolean;
-  title: string;
+  title: ReactNode;
   collapsedIcon: ReactNode;
   menu: ReactNode;
   anchor: RectCords | undefined;
@@ -56,6 +57,12 @@ export function PageNavHeaderWithMenu({
           </Box>
         )}
       </PageNavHeader>
+      {/* Kolpak: the "jump to" box sits under the header of every room list. */}
+      {!hideText && (
+        <div className="kolpak-jump-to-row">
+          <JumpTo />
+        </div>
+      )}
       <ResponsiveMenu
         anchor={anchor}
         requestClose={requestClose}

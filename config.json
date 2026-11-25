@@ -18,10 +18,13 @@
     "servers": ["matrix.klpq.io"]
   },
 
+  "streamStatsUrl": "https://stats-api.klpq.io/v1",
+
   "settingsDefaults": {
     "useSystemTheme": false,
     "themeId": "kolpak-theme",
-    "darkThemeId": "kolpak-theme"
+    "darkThemeId": "kolpak-theme",
+    "showUnreadCounts": true
   },
 
   "hashRouter": {

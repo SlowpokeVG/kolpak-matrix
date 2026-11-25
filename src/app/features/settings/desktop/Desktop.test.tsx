@@ -101,22 +101,22 @@ describe('Desktop', () => {
 
     const { container } = renderDesktop();
 
-    expect(screen.getByText('Close button keeps Sable running')).toBeInTheDocument();
+    expect(screen.getByText('Close button keeps Kolpak running')).toBeInTheDocument();
     expect(screen.getByText('Use custom title bar')).toBeInTheDocument();
     expect(
       screen.getByText(
-        'Use Sable-drawn window controls and connection status instead of the native window chrome.'
+        'Use Kolpak-drawn window controls and connection status instead of the native window chrome.'
       )
     ).toBeInTheDocument();
     expect(
       screen.getByText(
-        'When enabled, closing the window keeps Sable running in the system tray instead of exiting. This needs the tray icon below: without a tray to restore from, closing exits Sable.'
+        'When enabled, closing the window keeps Kolpak running in the system tray instead of exiting. This needs the tray icon below: without a tray to restore from, closing exits Kolpak.'
       )
     ).toBeInTheDocument();
     expect(screen.getByText('Show system tray icon')).toBeInTheDocument();
     expect(
       screen.getByText(
-        'Show a system tray icon while Sable is running. Disable this if you want Sable to stay available without a tray icon.'
+        'Show a system tray icon while Kolpak is running. Disable this if you want Kolpak to stay available without a tray icon.'
       )
     ).toBeInTheDocument();
     expect(screen.getByText('Spellcheck')).toBeInTheDocument();
@@ -147,7 +147,7 @@ describe('Desktop', () => {
 
     expect(
       screen.getByText(
-        'System tray is unavailable on this system. Without it, closing the window exits Sable.'
+        'System tray is unavailable on this system. Without it, closing the window exits Kolpak.'
       )
     ).toBeInTheDocument();
     expect(screen.getByRole('switch', { name: 'show-system-tray-icon' })).toBeDisabled();
@@ -160,7 +160,7 @@ describe('Desktop', () => {
 
     expect(
       screen.queryByText(
-        'System tray is unavailable on this system. Without it, closing the window exits Sable.'
+        'System tray is unavailable on this system. Without it, closing the window exits Kolpak.'
       )
     ).not.toBeInTheDocument();
   });
@@ -174,7 +174,7 @@ describe('Desktop', () => {
 
     expect(
       screen.queryByText(
-        'System tray is unavailable on this system. Without it, closing the window exits Sable.'
+        'System tray is unavailable on this system. Without it, closing the window exits Kolpak.'
       )
     ).not.toBeInTheDocument();
   });

@@ -91,7 +91,7 @@ Kolpak-specific:
 - **Control channel**: TCP + TLS to the server (default port 64738). Length-prefixed protobuf messages (2-byte type, 4-byte length). Handshake: `Version` → `Authenticate` (username, optional password, `opus = true`) → server sends `CryptSetup`, `CodecVersion`, channel and user state, `ServerSync`. Keep-alive `Ping` every ~15 s.
 - **Voice channel**: UDP to the same host/port, encrypted with the key/nonces from `CryptSetup` (OCB2-AES128). Fallback: tunnel voice packets through the TCP connection (`UDPTunnel`) when UDP is blocked; detect via UDP ping.
 - **Codec**: Opus, mono, 48 kHz, 10–20 ms frames (configurable up to 60 ms), bitrate bounded by the server's `max_bandwidth`.
-- **Packet format**: Mumble 1.5 introduced a protobuf-based UDP format alongside the legacy one. Which to implement depends on the server version — **TBD**; support legacy first unless the server is 1.5+ only.
+- **Packet format**: Mumble 1.5 introduced a protobuf-based UDP format alongside the legacy one. The community server is `mumble.klpq.io:64738` and answered a server-list ping on 2026-11-25 as version 1.5.x (the legacy version field reads 1.5.255, which is how 1.5 reports a patch number above 255), 100 user slots, 558 kbit/s bandwidth cap. So the protobuf UDP format is available; a 1.5 server still accepts the legacy format from older clients. Implement the 1.5 format first.
 - **Certificates**: Mumble identifies users by client certificate. Generate a self-signed cert on first run, store it in OS secure storage, allow import/export so users keep their registered identity from the official client. Server cert: trust-on-first-use with a pinned fingerprint prompt (most community servers are self-signed).
 
 ### 5.2 Features
@@ -146,7 +146,18 @@ The frontend keeps a `voice` store fed only by these events; UI never calls into
 
 ## 6. Streams
 
-Everything about the service is **TBD** until the owner supplies it: playback protocols and URL patterns, the channel list, and the API for live status/viewers/uptime/bitrate. The theater mockup assumes FLV, HLS and DASH are all offered and that channels are a fixed named list.
+Facts, read on 2026-11-25 from the station site's source (`klpq/klpq-angular`, a React/Vite app despite the name) and checked against the live API:
+
+- **Stats API**, base `https://stats-api.klpq.io/v1` (in `config.json` as `streamStatsUrl`). It answers with `Access-Control-Allow-Origin: *`, so the webview can poll it directly; no Rust poller is needed.
+  - `GET /streams?limit=1`: broadcast history. `options.channels` is the list of every known channel (seven when checked), `total` and `info.totalDuration` are station totals.
+  - `GET /channels/{name}`: `{ streams: [...] }`, one entry per protocol currently served. An empty list means off air. Each entry has `app`, `protocol`, `viewers`, `duration` (seconds), `bitrate` (kbps), `startTime`, `userName` and `urls.edge` (the playback URL) and `urls.web`.
+  - The site polls every 10 s and sends an optional `jwt-token` header taken from its own login; public data does not need it.
+- **Protocols seen:** `rtmp` (ingest, not playable in a webview) and `flv`, whose edge URL is **FLV over WebSocket** (`wss://…/live/{channel}.flv`). The site also handles `hls` and `mpd` (DASH) when the server offers them, and lists one quality per protocol/app pair.
+- **Players the site uses:** mpegts.js for FLV (`{ type: 'flv', isLive: true, cors: true }`), hls.js for HLS with native playback on iOS, dash.js for DASH with native playback on Android. The dock mockup's three stats are viewers, uptime (`duration`) and bitrate, all present in the API.
+- **Channels are not a fixed list:** they come from the API; the default channel is `stream`.
+- The site has no licence file. Kolpak's `src/kolpak/streams` is written from the API's behaviour, not copied from it.
+
+Built so far: `src/kolpak/streams/stats.ts` (fetchers and pure logic) and `useStreamChannels.ts` (polling hook), feeding the status bar. No player yet.
 
 Design:
 - `StreamProvider` interface: `listChannels()`, `status(channel) → { live, viewers?, startedAt?, bitrateKbps?, title? }`, `sources(channel) → [{ kind: "flv"|"hls"|"dash"|"webrtc", url }]`.

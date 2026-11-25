@@ -64,6 +64,9 @@ export type ClientConfig = {
   themeCatalogApprovedHostPrefixes?: string[];
 
   settingsDefaults?: Partial<Settings>;
+
+  /** Kolpak: base URL of the stream service stats API (src/kolpak/streams). */
+  streamStatsUrl?: string;
 };
 
 const EMPTY_CONFIG: ClientConfig = {};

@@ -38,6 +38,7 @@ import { roomToUnreadAtom } from '$state/room/roomToUnread';
 import { useCategoryHandler } from '$hooks/useCategoryHandler';
 import { useNavToActivePathMapper } from '$hooks/useNavToActivePathMapper';
 import { PageNavHeaderWithMenu, PageNavContent } from '$components/page';
+import { Wordmark } from '../../../../kolpak/layout/Wordmark';
 import { PageNavShell } from '$components/page/PageNavShell';
 import { useClosedNavCategoriesAtom } from '$state/hooks/closedNavCategories';
 import { useSetting } from '$state/hooks/settings';
@@ -99,7 +100,7 @@ function HomeHeader({ hideText }: { hideText?: boolean }) {
   return (
     <PageNavHeaderWithMenu
       hideText={hideText}
-      title="Home"
+      title={<Wordmark />}
       collapsedIcon={composerIcon(House, { weight: menu.anchor ? 'fill' : 'regular' })}
       menu={<HomeMenu requestClose={menu.close} />}
       anchor={menu.anchor}
