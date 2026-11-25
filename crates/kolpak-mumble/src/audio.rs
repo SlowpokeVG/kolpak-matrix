@@ -1,4 +1,5 @@
-//! Microphone capture: device → mono 48 kHz → 20 ms frames → transmit gate → Opus.
+//! Microphone capture: device → mono 48 kHz → 20 ms frames → noise suppression →
+//! transmit gate → Opus.
 //!
 //! Capture runs on its own thread because a cpal stream is not `Send`. The audio callback
 //! does all the processing and hands finished Opus frames to an async task through an
@@ -12,6 +13,7 @@ use std::time::Duration;
 
 use cpal::traits::{DeviceTrait, HostTrait, StreamTrait};
 use cpal::{FromSample, SampleFormat, SizedSample};
+use nnnoiseless::DenoiseState;
 use serde::Serialize;
 use tokio::sync::mpsc::{UnboundedReceiver, UnboundedSender};
 use unsafe_libopus::{
@@ -30,19 +32,21 @@ pub const FRAME_SAMPLES: usize = 960;
 /// Speech at this rate is clear and far below the server's per-user cap.
 const BITRATE_BPS: i32 = 40_000;
 /// The largest packet Opus can produce for one frame.
-const MAX_OPUS_PACKET: usize = 1275;
+pub(crate) const MAX_OPUS_PACKET: usize = 1275;
 
 #[derive(Debug, thiserror::Error)]
 pub enum AudioError {
     #[error("no microphone found")]
     NoInputDevice,
+    #[error("no speakers or headphones found")]
+    NoOutputDevice,
     #[error("the selected microphone is not available")]
     DeviceNotFound,
     #[error("the microphone uses a sample format Kolpak cannot read ({0})")]
     UnsupportedFormat(String),
     #[error("could not open the microphone: {0}")]
     Device(String),
-    #[error("the Opus encoder failed (code {0})")]
+    #[error("the Opus codec failed (code {0})")]
     Encoder(i32),
     #[error("the microphone did not start in time")]
     Timeout,
@@ -92,6 +96,7 @@ pub struct Controls {
     vad_threshold: AtomicU32,
     level: AtomicU32,
     transmitting: AtomicBool,
+    denoise: AtomicBool,
 }
 
 impl Controls {
@@ -104,6 +109,7 @@ impl Controls {
             vad_threshold: AtomicU32::new(DEFAULT_VAD_THRESHOLD.to_bits()),
             level: AtomicU32::new(0f32.to_bits()),
             transmitting: AtomicBool::new(false),
+            denoise: AtomicBool::new(true),
         }
     }
 
@@ -125,6 +131,11 @@ impl Controls {
 
     pub fn set_muted(&self, muted: bool) {
         self.muted.store(muted, Ordering::Relaxed);
+    }
+
+    /// Noise suppression on the microphone, on by default.
+    pub fn set_denoise(&self, enabled: bool) {
+        self.denoise.store(enabled, Ordering::Relaxed);
     }
 
     pub fn set_vad_threshold(&self, threshold: f32) {
@@ -151,13 +162,13 @@ pub struct VoiceFrame {
     pub last: bool,
 }
 
-struct Encoder(*mut OpusEncoder);
+pub(crate) struct Encoder(*mut OpusEncoder);
 
 // The encoder is only ever touched from the capture callback that owns it.
 unsafe impl Send for Encoder {}
 
 impl Encoder {
-    fn new() -> Result<Self, AudioError> {
+    pub(crate) fn new() -> Result<Self, AudioError> {
         let mut error = 0;
         // SAFETY: plain constructor call; `error` outlives it.
         let raw = unsafe {
@@ -175,7 +186,7 @@ impl Encoder {
         Ok(encoder)
     }
 
-    fn encode(&mut self, pcm: &[f32], out: &mut [u8]) -> Result<usize, AudioError> {
+    pub(crate) fn encode(&mut self, pcm: &[f32], out: &mut [u8]) -> Result<usize, AudioError> {
         debug_assert_eq!(pcm.len(), FRAME_SAMPLES);
         // SAFETY: `pcm` holds exactly one mono frame and `out` is writable for its length.
         let written = unsafe {
@@ -204,7 +215,7 @@ impl Drop for Encoder {
 
 /// Linear-interpolation resampler. Good enough for speech from a 44.1 kHz microphone;
 /// most Windows devices already run at 48 kHz and skip it entirely.
-struct Resampler {
+pub(crate) struct Resampler {
     step: f64,
     pos: f64,
     prev: f32,
@@ -212,14 +223,19 @@ struct Resampler {
 
 impl Resampler {
     fn new(input_rate: u32) -> Self {
+        Self::between(input_rate, SAMPLE_RATE)
+    }
+
+    /// Convert from one sample rate to another.
+    pub(crate) fn between(from: u32, to: u32) -> Self {
         Self {
-            step: f64::from(input_rate) / f64::from(SAMPLE_RATE),
+            step: f64::from(from) / f64::from(to),
             pos: 0.0,
             prev: 0.0,
         }
     }
 
-    fn process(&mut self, input: &[f32], out: &mut Vec<f32>) {
+    pub(crate) fn process(&mut self, input: &[f32], out: &mut impl Extend<f32>) {
         if input.is_empty() {
             return;
         }
@@ -236,11 +252,32 @@ impl Resampler {
             };
             let b = input[(index + 1) as usize];
             let frac = (self.pos - index as f64) as f32;
-            out.push(a + (b - a) * frac);
+            out.extend(std::iter::once(a + (b - a) * frac));
             self.pos += self.step;
         }
         self.prev = input[input.len() - 1];
         self.pos -= input.len() as f64;
+    }
+}
+
+/// Run one 20 ms frame through RNNoise, which works on 10 ms frames of samples scaled like
+/// 16-bit PCM.
+fn denoise_frame(
+    denoiser: &mut DenoiseState<'static>,
+    input: &[f32],
+    out: &mut [f32; FRAME_SAMPLES],
+) {
+    const STEP: usize = DenoiseState::FRAME_SIZE;
+    let mut scaled_in = [0f32; STEP];
+    let mut scaled_out = [0f32; STEP];
+    for (chunk_in, chunk_out) in input.chunks_exact(STEP).zip(out.chunks_exact_mut(STEP)) {
+        for (scaled, sample) in scaled_in.iter_mut().zip(chunk_in) {
+            *scaled = sample * 32768.0;
+        }
+        denoiser.process_frame(&mut scaled_out, &scaled_in);
+        for (sample, scaled) in chunk_out.iter_mut().zip(&scaled_out) {
+            *sample = (scaled / 32768.0).clamp(-1.0, 1.0);
+        }
     }
 }
 
@@ -253,6 +290,8 @@ struct Processor {
     packet: [u8; MAX_OPUS_PACKET],
     encoder: Encoder,
     gate: Gate,
+    denoiser: Box<DenoiseState<'static>>,
+    clean: [f32; FRAME_SAMPLES],
     controls: Arc<Controls>,
     sink: UnboundedSender<VoiceFrame>,
 }
@@ -276,8 +315,16 @@ impl Processor {
 
         let mut offset = 0;
         while self.pending.len() - offset >= FRAME_SAMPLES {
-            let frame = &self.pending[offset..offset + FRAME_SAMPLES];
+            let raw = &self.pending[offset..offset + FRAME_SAMPLES];
             offset += FRAME_SAMPLES;
+            // The level and the gate see the cleaned signal, so steady room noise does not
+            // hold voice activity open.
+            let frame: &[f32] = if self.controls.denoise.load(Ordering::Relaxed) {
+                denoise_frame(&mut self.denoiser, raw, &mut self.clean);
+                &self.clean
+            } else {
+                raw
+            };
 
             let level = rms(frame);
             self.controls
@@ -419,6 +466,8 @@ fn open_stream(
         packet: [0; MAX_OPUS_PACKET],
         encoder: Encoder::new()?,
         gate: Gate::new(),
+        denoiser: DenoiseState::new(),
+        clean: [0.0; FRAME_SAMPLES],
         controls,
         sink,
     };
@@ -514,6 +563,30 @@ mod tests {
         let len = encoder.encode(&tone, &mut packet).unwrap();
         // 40 kbit/s for 20 ms is about 100 bytes; allow a wide margin either way.
         assert!((10..400).contains(&len), "unexpected packet size {len}");
+    }
+
+    #[test]
+    fn noise_suppression_brings_steady_noise_down() {
+        // A deterministic hiss: a simple linear congruential generator.
+        let mut seed = 0x1234_5678u32;
+        let mut noise = move || {
+            seed = seed.wrapping_mul(1_664_525).wrapping_add(1_013_904_223);
+            ((seed >> 8) as f32 / (1u32 << 24) as f32 - 0.5) * 0.1
+        };
+        let mut denoiser = DenoiseState::new();
+        let mut out = [0f32; FRAME_SAMPLES];
+        let (mut level_in, mut level_out) = (0.0, 0.0);
+        // Let the model settle for a second, then compare the last frame.
+        for _ in 0..50 {
+            let frame: Vec<f32> = (0..FRAME_SAMPLES).map(|_| noise()).collect();
+            denoise_frame(&mut denoiser, &frame, &mut out);
+            level_in = rms(&frame);
+            level_out = rms(&out);
+        }
+        assert!(
+            level_out < level_in * 0.5,
+            "noise went from {level_in} to {level_out}"
+        );
     }
 
     #[test]

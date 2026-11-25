@@ -226,7 +226,7 @@ export const settingsLinkFocusIdsBySection: Record<SettingsSectionId, readonly s
     'import-messages-data',
   ],
   // Kolpak: the Voice page lives in src/kolpak/voice and is outside this folder.
-  voice: ['join-voice-on-startup'],
+  voice: ['join-voice-on-startup', 'voice-noise-suppression'],
   desktop: [
     'auto-update-check',
     'close-to-background-on-close',

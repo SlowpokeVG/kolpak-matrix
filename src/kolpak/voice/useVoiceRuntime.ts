@@ -1,15 +1,21 @@
 import { useEffect } from 'react';
 import { isDesktopTauri } from '$utils/platform';
 import { useVoiceSettings } from './useVoiceSettings';
-import { applyTransmitSettings, setPushToTalk, startVoiceBridge } from './voiceStore';
+import {
+  applyOutputSettings,
+  applyTransmitSettings,
+  setPushToTalk,
+  startVoiceBridge,
+} from './voiceStore';
 
 /**
  * Keeps the native voice side in step with the settings, for as long as the client is
  * mounted: starts the event bridge, pushes transmit settings whenever they change, and
  * watches the push-to-talk key.
  *
- * Push to talk works while a Kolpak window has focus. A system-wide hotkey that works
- * from other apps is not built yet.
+ * On Windows the native side reads the push-to-talk key itself, system-wide, and ignores
+ * what this listener reports. Elsewhere this listener is all there is, so push to talk
+ * only works while a Kolpak window has focus.
  */
 export function useVoiceRuntime(): void {
   const settings = useVoiceSettings();
@@ -23,8 +29,20 @@ export function useVoiceRuntime(): void {
       mode: settings.transmitMode,
       vadThreshold: settings.vadThreshold,
       inputDevice: settings.inputDevice,
+      pttKey: settings.pttKey,
+      noiseSuppression: settings.noiseSuppression,
     });
-  }, [settings.transmitMode, settings.vadThreshold, settings.inputDevice]);
+  }, [
+    settings.transmitMode,
+    settings.vadThreshold,
+    settings.inputDevice,
+    settings.pttKey,
+    settings.noiseSuppression,
+  ]);
+
+  useEffect(() => {
+    void applyOutputSettings(settings.outputDevice, settings.outputVolume);
+  }, [settings.outputDevice, settings.outputVolume]);
 
   useEffect(() => {
     if (!isDesktopTauri() || settings.transmitMode !== 'ptt' || !settings.pttKey) {

@@ -17,6 +17,7 @@ use crate::codec::{decode_frame, encode_frame, encode_raw_frame, Frame};
 use crate::proto::{self, MessageType};
 use crate::state::{ServerState, Snapshot};
 use crate::tls;
+use crate::udp::{self, UdpLink};
 
 pub const DEFAULT_PORT: u16 = 64738;
 
@@ -38,8 +39,11 @@ pub struct ConnectOptions {
     pub pinned_fingerprint: Option<String>,
     /// Shown to other users as the client name, for example "Kolpak 0.1".
     pub client_name: String,
-    /// Mark ourselves muted and deafened as soon as we are in. While there is no audio
-    /// this is the honest state, and it stops the server sending us voice we would drop.
+    /// Mark ourselves muted as soon as we are in, so the microphone stays closed until the
+    /// user opens it.
+    pub join_muted: bool,
+    /// Mark ourselves deafened (which also mutes) as soon as we are in. The server then
+    /// sends us no voice at all.
     pub join_deafened: bool,
 }
 
@@ -114,6 +118,11 @@ pub enum Event {
     Ping {
         rtt_ms: f32,
     },
+    /// Voice switched between the UDP channel (`true`) and the tunnel through the control
+    /// connection (`false`). Starts on the tunnel.
+    Udp {
+        active: bool,
+    },
     Text {
         actor: Option<u32>,
         message: String,
@@ -147,6 +156,10 @@ pub enum ConnectError {
 pub struct Connection {
     pub client: Client,
     pub events: mpsc::Receiver<Event>,
+    /// Voice packets from the server, as raw bytes for `crate::voice::decode_audio_packet`.
+    /// Unbounded so that a slow consumer cannot stall the control connection; dropping the
+    /// receiver just discards incoming voice.
+    pub voice: mpsc::UnboundedReceiver<Bytes>,
     /// SHA-256 fingerprint of the certificate the server presented. Store it and pass it
     /// as `pinned_fingerprint` next time.
     pub fingerprint: String,
@@ -231,7 +244,10 @@ pub async fn connect(options: ConnectOptions) -> Result<Connection, ConnectError
     let handshake = async {
         let tcp = TcpStream::connect((options.host.as_str(), options.port)).await?;
         tcp.set_nodelay(true)?;
-        connector.connect(server_name, tcp).await
+        // Voice over UDP goes to the same address and port as the control connection.
+        let peer = tcp.peer_addr().ok();
+        let stream = connector.connect(server_name, tcp).await?;
+        Ok::<_, std::io::Error>((stream, peer))
     };
     let stream = match tokio::time::timeout(CONNECT_TIMEOUT, handshake).await {
         Err(_) => return Err(ConnectError::Timeout),
@@ -247,8 +263,9 @@ pub async fn connect(options: ConnectOptions) -> Result<Connection, ConnectError
                 _ => ConnectError::Io(error),
             });
         }
-        Ok(Ok(stream)) => stream,
+        Ok(Ok(connected)) => connected,
     };
+    let (stream, udp_target) = stream;
 
     let fingerprint = seen
         .lock()
@@ -260,13 +277,17 @@ pub async fn connect(options: ConnectOptions) -> Result<Connection, ConnectError
     let (event_tx, event_rx) = mpsc::channel(64);
     // Room for a few seconds of 20 ms voice packets on top of ordinary commands.
     let (command_tx, command_rx) = mpsc::channel(256);
-    tokio::spawn(run(stream, options, event_tx, command_rx));
+    let (voice_tx, voice_rx) = mpsc::unbounded_channel();
+    tokio::spawn(run(
+        stream, options, event_tx, command_rx, voice_tx, udp_target,
+    ));
 
     Ok(Connection {
         client: Client {
             commands: command_tx,
         },
         events: event_rx,
+        voice: voice_rx,
         fingerprint,
         pinned,
     })
@@ -287,16 +308,18 @@ struct Session {
     /// State changed since the last snapshot was sent.
     dirty: bool,
     started: Instant,
+    join_muted: bool,
     join_deafened: bool,
 }
 
 impl Session {
-    fn new(join_deafened: bool) -> Self {
+    fn new(join_muted: bool, join_deafened: bool) -> Self {
         Self {
             state: ServerState::new(),
             synced: false,
             dirty: false,
             started: Instant::now(),
+            join_muted,
             join_deafened,
         }
     }
@@ -389,13 +412,13 @@ impl Session {
                     max_bandwidth: msg.max_bandwidth,
                     welcome_text: msg.welcome_text,
                 });
-                if self.join_deafened {
+                if self.join_muted || self.join_deafened {
                     out.send.push(encode_frame(
                         MessageType::UserState,
                         &proto::UserState {
                             session: Some(session),
                             self_mute: Some(true),
-                            self_deaf: Some(true),
+                            self_deaf: Some(self.join_deafened),
                             ..Default::default()
                         },
                     ));
@@ -425,7 +448,8 @@ impl Session {
                     reason: msg.reason.unwrap_or_else(|| "permission denied".into()),
                 });
             }
-            // Voice over TCP, key material for UDP, and everything Kolpak does not use yet.
+            // Everything Kolpak does not use yet. Tunnelled voice and the UDP key material
+            // never reach here: the connection loop takes them before parsing.
             _ => {}
         }
         out
@@ -471,11 +495,15 @@ async fn run<S>(
     options: ConnectOptions,
     events: mpsc::Sender<Event>,
     mut commands: mpsc::Receiver<Command>,
+    voice: mpsc::UnboundedSender<Bytes>,
+    udp_target: Option<std::net::SocketAddr>,
 ) where
     S: tokio::io::AsyncRead + tokio::io::AsyncWrite + Unpin,
 {
     let (mut reader, mut writer) = tokio::io::split(stream);
-    let mut session = Session::new(options.join_deafened);
+    let mut session = Session::new(options.join_muted, options.join_deafened);
+    let mut udp = UdpLink::new(udp_target);
+    let mut datagram = [0u8; udp::MAX_DATAGRAM];
 
     let hello = [
         encode_frame(MessageType::Version, &version_message(&options.client_name)),
@@ -503,6 +531,8 @@ async fn run<S>(
         let mut ping =
             tokio::time::interval_at(tokio::time::Instant::now() + PING_INTERVAL, PING_INTERVAL);
         ping.set_missed_tick_behavior(tokio::time::MissedTickBehavior::Delay);
+        let mut udp_ping = tokio::time::interval(udp::PING_INTERVAL);
+        udp_ping.set_missed_tick_behavior(tokio::time::MissedTickBehavior::Delay);
 
         loop {
             tokio::select! {
@@ -518,6 +548,22 @@ async fn run<S>(
                             Ok(None) => break,
                             Err(error) => break 'conn Disconnect::Error { message: error.to_string() },
                         };
+                        // Voice is not a control message: pass the bytes on untouched.
+                        if frame.kind == MessageType::UdpTunnel as u16 {
+                            let _ = voice.send(frame.payload);
+                            continue;
+                        }
+                        // Key material for the UDP voice channel.
+                        if frame.kind == MessageType::CryptSetup as u16 {
+                            if let Ok(setup) = proto::CryptSetup::decode(frame.payload) {
+                                if let Some(reply) = udp.on_crypt_setup(setup).await {
+                                    if let Err(error) = writer.write_all(&reply).await {
+                                        break 'conn Disconnect::Error { message: error.to_string() };
+                                    }
+                                }
+                            }
+                            continue;
+                        }
                         let outcome = session.handle(frame);
                         for event in outcome.events {
                             if events.send(event).await.is_err() {
@@ -544,10 +590,43 @@ async fn run<S>(
                         break 'conn Disconnect::Error { message: error.to_string() };
                     }
                 }
+                received = udp.recv(&mut datagram) => {
+                    // A socket error here is a UDP hiccup, not a reason to drop the connection.
+                    if let Ok(len) = received {
+                        if let Some(packet) = udp.on_datagram(&datagram[..len]) {
+                            let _ = voice.send(packet);
+                        }
+                        if let Some(active) = udp.refresh() {
+                            if events.send(Event::Udp { active }).await.is_err() {
+                                break 'conn Disconnect::Requested;
+                            }
+                        }
+                    }
+                }
+                _ = udp_ping.tick() => {
+                    udp.send_ping().await;
+                    if let Some(active) = udp.refresh() {
+                        if events.send(Event::Udp { active }).await.is_err() {
+                            break 'conn Disconnect::Requested;
+                        }
+                    }
+                }
                 command = commands.recv() => {
                     match command {
                         // Every `Client` handle was dropped, or we were told to leave.
                         None | Some(Command::Disconnect) => break 'conn Disconnect::Requested,
+                        Some(Command::Voice(packet)) => {
+                            // UDP when it works, the tunnel when it does not.
+                            let sent = session.state.session().is_some()
+                                && udp.send_voice(&packet).await;
+                            if !sent {
+                                if let Some(frame) = session.command_frame(&Command::Voice(packet)) {
+                                    if let Err(error) = writer.write_all(&frame).await {
+                                        break 'conn Disconnect::Error { message: error.to_string() };
+                                    }
+                                }
+                            }
+                        }
                         Some(command) => {
                             if let Some(frame) = session.command_frame(&command) {
                                 if let Err(error) = writer.write_all(&frame).await {
@@ -606,7 +685,7 @@ mod tests {
 
     #[test]
     fn holds_the_snapshot_until_sync_then_sends_one() {
-        let mut session = Session::new(true);
+        let mut session = Session::new(true, true);
         session.handle(frame(
             MessageType::ChannelState,
             &proto::ChannelState {
@@ -666,8 +745,25 @@ mod tests {
     }
 
     #[test]
+    fn joining_muted_closes_the_microphone_without_deafening() {
+        let mut session = Session::new(true, false);
+        let outcome = session.handle(frame(
+            MessageType::ServerSync,
+            &proto::ServerSync {
+                session: Some(5),
+                ..Default::default()
+            },
+        ));
+        let (_, state): (u16, proto::UserState) = decode_sent(&outcome.send[0]);
+        assert_eq!(
+            (state.self_mute, state.self_deaf),
+            (Some(true), Some(false))
+        );
+    }
+
+    #[test]
     fn a_reject_stops_the_connection_with_its_reason() {
-        let mut session = Session::new(false);
+        let mut session = Session::new(false, false);
         let outcome = session.handle(frame(
             MessageType::Reject,
             &proto::Reject {
@@ -686,7 +782,7 @@ mod tests {
 
     #[test]
     fn being_removed_ends_the_session_but_others_leaving_does_not() {
-        let mut session = Session::new(false);
+        let mut session = Session::new(false, false);
         session.handle(frame(
             MessageType::ServerSync,
             &proto::ServerSync {
@@ -727,7 +823,7 @@ mod tests {
 
     #[test]
     fn unknown_and_unused_message_types_are_ignored() {
-        let mut session = Session::new(false);
+        let mut session = Session::new(false, false);
         let unknown = session.handle(Frame {
             kind: 999,
             payload: Bytes::from_static(b"\xff\xff"),
@@ -744,7 +840,7 @@ mod tests {
 
     #[test]
     fn commands_need_a_session_and_target_ourselves() {
-        let mut session = Session::new(false);
+        let mut session = Session::new(false, false);
         assert!(
             session.command_frame(&Command::JoinChannel(3)).is_none(),
             "not synced yet"
@@ -776,9 +872,18 @@ mod tests {
             password: None,
             pinned_fingerprint: None,
             client_name: "Kolpak test".into(),
+            join_muted: false,
             join_deafened: false,
         };
-        let task = tokio::spawn(run(client_side, options, event_tx, command_rx));
+        let (voice_tx, mut voice_rx) = mpsc::unbounded_channel();
+        let task = tokio::spawn(run(
+            client_side,
+            options,
+            event_tx,
+            command_rx,
+            voice_tx,
+            None,
+        ));
 
         // The client speaks first: Version, then Authenticate.
         let mut inbox = BytesMut::new();
@@ -844,6 +949,19 @@ mod tests {
             panic!("expected a snapshot after a user joined");
         };
         assert_eq!(second.users.len(), 2);
+
+        // Tunnelled voice comes out of the voice channel byte for byte, not as an event.
+        server_side
+            .write_all(&encode_raw_frame(
+                MessageType::UdpTunnel,
+                &[0x00, 0x08, 0x00],
+            ))
+            .await
+            .unwrap();
+        assert_eq!(
+            voice_rx.recv().await.as_deref(),
+            Some(&[0x00, 0x08, 0x00][..])
+        );
 
         Client {
             commands: command_tx,

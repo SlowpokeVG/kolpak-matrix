@@ -300,6 +300,39 @@ Verified live from the app against the community server: join, microphone opens,
 
 Next for Spike 2: receive and play (decode, jitter buffer, mix, output device), talking indicators for others, then the UDP channel and a global push-to-talk hotkey.
 
+### 2026-11-25 — hearing others, the UDP channel, and the limits list
+
+The owner asked for receive, then for "all limits" from the previous entry to be fixed. Four of the five are done; echo cancellation is not.
+
+**Receive and playback** (`crates/kolpak-mumble/src/playback.rs`). The connection hands incoming voice packets to the caller on a separate unbounded channel, so a slow consumer cannot stall control traffic. Each speaker gets an Opus decoder and a buffer with a fixed 60 ms cushion before it starts playing and a 400 ms cap so delay cannot build up; a mixer sums the speakers, applies the output volume and clamps; a `cpal` output stream plays it, resampling when the device is not at 48 kHz. Deliberately simple: no adaptive jitter buffer, no loss concealment. Talking state comes from packets and the terminator flag, with a 350 ms timeout.
+
+**We now join hearing, with the microphone closed** (`join_muted`), instead of muted and deafened. Deafening stops playback and drops incoming packets.
+
+**UDP voice channel** (`crypt.rs`, `udp.rs`). OCB2 with AES-128, written against upstream's `CryptStateOCB2.cpp` including its replay window, late and lost accounting and both XEX* mitigations; it passes the two reference vectors and the every-length round trip from upstream's `TestCrypt.cpp`. The client pings over UDP every 5 s; while replies arrive, voice goes over UDP, and after 12 s without one it falls back to the tunnel through the control connection. The server's nonce resync requests are answered. A socket error on the UDP side never drops the connection.
+
+**Noise suppression.** RNNoise through `nnnoiseless` (pure Rust) on the microphone, before the level meter and the gate, so steady room noise does not hold voice activity open. On by default, with a switch in Settings → Voice.
+
+**System-wide push to talk, Windows only.** A registered global hotkey would swallow the key in every other app, so instead the native side reads the key's state (`GetAsyncKeyState`) every 10 ms while in push-to-talk mode. It works from any app and leaves the key alone. On other platforms there is no implementation and the webview's focused-window listener is still the only source; under Wayland this will need the portal.
+
+**Settings → Voice** gained: output device, output volume (0–200%), output level meter, the noise suppression switch, and a line saying which path voice is using. People who are speaking are green in the dock's tree.
+
+**Verified against the community server:**
+
+- Two CLI clients in the Root channel: one sent 299 frames, the other received 299 voice packets, all decoded, attributed to the right sender, with the listener reporting the UDP transport. This also closes the earlier gap: sent voice does reach other clients.
+- In the app: join hearing with the microphone closed, both devices open, voice path UDP.
+- 57 crate tests, 5 bridge tests, the frontend suites, clippy with warnings as errors, typecheck: all pass.
+
+**Not verified:** anyone speaking and being heard through the speakers in the app. During every observation window the people in the channel happened to be silent, and the default microphone here read as silence. The decode path is covered by a test that runs real Opus packets through the mixer.
+
+**Still open:**
+
+- **Echo cancellation.** Not built. It needs the played signal as a reference for the capture path and a real AEC implementation; none of the pure-Rust options was evaluated. Headset users do not need it; speaker users will echo.
+- Automatic gain control.
+- Adaptive jitter buffer and packet-loss concealment.
+- Push to talk system-wide on macOS and Linux.
+- Per-user volume and local mute.
+- The certificate pin and the voice settings are still in `localStorage`.
+
 ## Starting a new Claude session on this
 
 Open the session in a local clone of this repo and say something like:

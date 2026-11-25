@@ -28,6 +28,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         password: None,
         pinned_fingerprint,
         client_name: format!("Kolpak {} (spike)", env!("CARGO_PKG_VERSION")),
+        join_muted: true,
         join_deafened: true,
     })
     .await?;
@@ -78,6 +79,10 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
                     }
                 }
                 Some(Event::Ping { rtt_ms }) => println!("ping {rtt_ms:.1} ms"),
+                Some(Event::Udp { active }) => println!(
+                    "voice transport: {}",
+                    if active { "UDP" } else { "TCP tunnel" }
+                ),
                 Some(Event::Text { message, .. }) => println!("text message: {} chars", message.len()),
                 Some(Event::Denied { reason }) => println!("denied: {reason}"),
                 Some(Event::Disconnected(reason)) => {

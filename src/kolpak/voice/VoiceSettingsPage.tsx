@@ -5,18 +5,19 @@ import { SettingTile, SettingToggle } from '$components/setting-tile';
 import { useVoiceDefaults, useVoiceSettings } from './useVoiceSettings';
 import {
   formatKeyCode,
+  MAX_OUTPUT_VOLUME,
   MAX_VAD_THRESHOLD,
   updateVoiceSettings,
   useStoredVoiceSettings,
   type TransmitMode,
 } from './voiceSettings';
-import { listInputDevices, useVoice, type InputDevice } from './voiceStore';
+import { listInputDevices, listOutputDevices, useVoice, type InputDevice } from './voiceStore';
 import './voice-settings.css';
 
 // Settings → Voice: the Mumble server, the name we join with, the microphone, and how it
 // is keyed, including the push-to-talk key.
 //
-// Sending voice works. Playing other people's voice is not built yet, and the page says so.
+// Both directions work: your microphone is sent and other people are played.
 
 const MODE_LABELS: Record<TransmitMode, string> = {
   ptt: 'Push to talk',
@@ -77,27 +78,33 @@ function PushToTalkKey({ value }: { value: string }) {
   );
 }
 
-function MicrophoneSelect({ value }: { value: string }) {
+type DeviceSelectProps = {
+  kind: 'input' | 'output';
+  value: string;
+  onChange: (id: string) => void;
+};
+
+function DeviceSelect({ kind, value, onChange }: DeviceSelectProps) {
   const [devices, setDevices] = useState<InputDevice[]>([]);
 
   useEffect(() => {
     let current = true;
-    void listInputDevices().then((list) => {
+    void (kind === 'input' ? listInputDevices() : listOutputDevices()).then((list) => {
       if (current) setDevices(list);
     });
     return () => {
       current = false;
     };
-  }, []);
+  }, [kind]);
 
   const known = value === '' || devices.some((device) => device.id === value);
 
   return (
     <select
       className="kolpak-select"
-      aria-label="Microphone"
+      aria-label={kind === 'input' ? 'Microphone' : 'Speakers'}
       value={value}
-      onChange={(event) => updateVoiceSettings({ inputDevice: event.target.value })}
+      onChange={(event) => onChange(event.target.value)}
     >
       <option value="">System default</option>
       {devices.map((device) => (
@@ -106,7 +113,7 @@ function MicrophoneSelect({ value }: { value: string }) {
           {device.isDefault ? ' (default)' : ''}
         </option>
       ))}
-      {!known && <option value={value}>Saved microphone (not connected)</option>}
+      {!known && <option value={value}>Saved device (not connected)</option>}
     </select>
   );
 }
@@ -116,20 +123,25 @@ const meterScale = (level: number): string =>
 
 // The meter and the threshold share one scale, so the marker shows where speech has to
 // reach for voice activity to open the microphone.
-function LevelMeter({ threshold }: { threshold?: number }) {
-  const voice = useVoice();
+type LevelMeterProps = {
+  label: string;
+  level: number;
+  active?: boolean;
+  threshold?: number;
+};
 
+function LevelMeter({ label, level, active, threshold }: LevelMeterProps) {
   return (
     <div
       className="kolpak-meter"
-      data-transmitting={voice.transmitting ? 'true' : undefined}
+      data-transmitting={active ? 'true' : undefined}
       role="meter"
-      aria-label="Microphone level"
+      aria-label={label}
       aria-valuemin={0}
       aria-valuemax={100}
-      aria-valuenow={Math.round(Math.min(1, voice.inputLevel / MAX_VAD_THRESHOLD) * 100)}
+      aria-valuenow={Math.round(Math.min(1, level / MAX_VAD_THRESHOLD) * 100)}
     >
-      <div className="kolpak-meter__fill" style={{ width: meterScale(voice.inputLevel) }} />
+      <div className="kolpak-meter__fill" style={{ width: meterScale(level) }} />
       {threshold !== undefined && (
         <div className="kolpak-meter__mark" style={{ left: meterScale(threshold) }} />
       )}
@@ -229,6 +241,16 @@ export function VoiceSettingsPage({ requestBack, requestClose }: VoiceSettingsPa
                     />
                   }
                 />
+                {connected && (
+                  <SettingTile
+                    title="Voice path"
+                    description={
+                      voice.udp
+                        ? 'UDP: the direct, low-delay path.'
+                        : 'Through the control connection. Slower; used while UDP is blocked or still being checked.'
+                    }
+                  />
+                )}
                 <SettingToggle
                   title="Join voice on startup"
                   description="Connect to the server when Kolpak starts."
@@ -240,8 +262,60 @@ export function VoiceSettingsPage({ requestBack, requestClose }: VoiceSettingsPa
               </Box>
 
               <Box direction="Column" gap="100">
+                <Text size="L400">Speakers</Text>
+                <SettingTile
+                  title="Output"
+                  description={
+                    voice.outputError ??
+                    (voice.outputDevice
+                      ? `In use: ${voice.outputDevice}`
+                      : 'Used when you join voice.')
+                  }
+                  after={
+                    <DeviceSelect
+                      kind="output"
+                      value={settings.outputDevice}
+                      onChange={(outputDevice) => updateVoiceSettings({ outputDevice })}
+                    />
+                  }
+                />
+                <SettingTile
+                  title="Volume"
+                  description={`${Math.round(settings.outputVolume * 100)}%. Above 100% boosts quiet voices.`}
+                  after={
+                    <input
+                      className="kolpak-range"
+                      type="range"
+                      aria-label="Voice volume"
+                      min={0}
+                      max={MAX_OUTPUT_VOLUME}
+                      step={0.05}
+                      value={settings.outputVolume}
+                      onChange={(event) =>
+                        updateVoiceSettings({ outputVolume: Number(event.target.value) })
+                      }
+                    />
+                  }
+                />
+                <SettingTile
+                  title="Output level"
+                  description={
+                    connected
+                      ? 'Moves when someone in your channel speaks.'
+                      : 'Join voice to hear others.'
+                  }
+                  after={
+                    <LevelMeter
+                      label="Voice output level"
+                      level={voice.outputLevel}
+                      active={voice.talking.length > 0}
+                    />
+                  }
+                />
+              </Box>
+
+              <Box direction="Column" gap="100">
                 <Text size="L400">Microphone</Text>
-                <SettingTile description="Your voice is sent to the channel. Hearing others is not built yet, so you will not hear replies in Kolpak." />
                 <SettingTile
                   title="Microphone"
                   description={
@@ -250,7 +324,13 @@ export function VoiceSettingsPage({ requestBack, requestClose }: VoiceSettingsPa
                       ? `In use: ${voice.captureDevice}`
                       : 'Used when you join voice.')
                   }
-                  after={<MicrophoneSelect value={settings.inputDevice} />}
+                  after={
+                    <DeviceSelect
+                      kind="input"
+                      value={settings.inputDevice}
+                      onChange={(inputDevice) => updateVoiceSettings({ inputDevice })}
+                    />
+                  }
                 />
                 <SettingTile
                   title="Input level"
@@ -261,11 +341,22 @@ export function VoiceSettingsPage({ requestBack, requestClose }: VoiceSettingsPa
                   }
                   after={
                     <LevelMeter
+                      label="Microphone level"
+                      level={voice.inputLevel}
+                      active={voice.transmitting}
                       threshold={
                         settings.transmitMode === 'vad' ? settings.vadThreshold : undefined
                       }
                     />
                   }
+                />
+                <SettingToggle
+                  title="Noise suppression"
+                  focusId="voice-noise-suppression"
+                  description="Removes steady background noise such as fans and hiss from your microphone."
+                  value={settings.noiseSuppression}
+                  onChange={(noiseSuppression) => updateVoiceSettings({ noiseSuppression })}
+                  ariaLabel="voice-noise-suppression"
                 />
                 <SettingTile
                   title="Transmit"
@@ -312,7 +403,7 @@ export function VoiceSettingsPage({ requestBack, requestClose }: VoiceSettingsPa
                   title="Push-to-talk key"
                   description={
                     settings.transmitMode === 'ptt'
-                      ? 'Hold this key to talk, while a Kolpak window has focus. Click the button, then press the key. Escape cancels.'
+                      ? 'Hold this key to talk. On Windows it works from any app; elsewhere only while Kolpak has focus. Click the button, then press the key. Escape cancels.'
                       : 'Used when Transmit is set to Push to talk.'
                   }
                   after={<PushToTalkKey value={settings.pttKey} />}

@@ -14,10 +14,15 @@
 pub mod audio;
 pub mod client;
 pub mod codec;
+pub mod crypt;
 pub mod gate;
+pub mod key_state;
+#[cfg(feature = "audio")]
+pub mod playback;
 pub mod proto;
 pub mod state;
 pub mod tls;
+mod udp;
 pub mod voice;
 
 pub use client::{

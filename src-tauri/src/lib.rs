@@ -488,6 +488,10 @@ pub fn run() {
             #[cfg(desktop)]
             mumble::audio_list_input_devices,
             #[cfg(desktop)]
+            mumble::audio_list_output_devices,
+            #[cfg(desktop)]
+            mumble::mumble_set_output,
+            #[cfg(desktop)]
             mumble::mumble_get_state,
             #[cfg(feature = "matrix-crypto")]
             matrix_crypto::engine_invoke,

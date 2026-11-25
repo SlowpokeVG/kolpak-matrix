@@ -123,18 +123,19 @@ mumble_connect({ args: { host, port?, username, password?, pinnedFingerprint? } 
 mumble_disconnect()
 mumble_join_channel({ channelId })
 mumble_set_self({ mute?, deaf? })
-mumble_set_transmit({ args: { mode: "ptt" | "vad" | "continuous", vadThreshold?, inputDevice? } })
-mumble_ptt({ down })
-audio_list_input_devices() → [{ id, name, isDefault }]
-mumble_get_state() → { state, snapshot, pingMs?, capture }   // for a webview that just loaded
+mumble_set_transmit({ args: { mode: "ptt" | "vad" | "continuous", vadThreshold?, inputDevice?,
+                              pttKey?, noiseSuppression? } })
+mumble_set_output({ args: { outputDevice?, volume? } })
+mumble_ptt({ down })                            // ignored where the key is read natively (Windows)
+audio_list_input_devices() / audio_list_output_devices() → [{ id, name, isDefault }]
+mumble_get_state() → { state, snapshot, pingMs?, capture, udp }   // for a webview that just loaded
 ```
 
-Still to come with receive:
+Still to come:
 
 ```
 mumble_set_user_volume({ session, gain })      // local only
 mumble_set_user_local_mute({ session, muted })
-audio_list_output_devices() / audio_set_output({ device?, volume? })
 ```
 
 Events (Rust → webview). Built:
@@ -146,16 +147,13 @@ mumble://snapshot  { session, channels: [{ id, parent, name, position, temporary
                               registered, prioritySpeaker, recording }] }   // the whole tree, on every change
 mumble://stats     { pingMs }
 mumble://text      { actor?, message }
-audio://levels     { input, transmitting }      // about 10 Hz while connected, only when it changes
-audio://capture    { deviceName?, error? }      // when the microphone opens or fails
+mumble://talking   { sessions }                 // everyone else who is speaking, when it changes
+mumble://transport { udp }                      // voice switched between UDP and the tunnel
+audio://levels     { input, output, transmitting }   // about 10 Hz while connected, only when it changes
+audio://capture    { deviceName?, error?, outputDeviceName?, outputError? }
 ```
 
-Still to come with receive:
-
-```
-mumble://talking   { session, talking }
-mumble://stats     + { udp: boolean, loss }
-```
+Still to come: packet loss in `mumble://stats`.
 
 The frontend keeps a `voice` store fed only by these events; UI never calls into Mumble state synchronously.
 

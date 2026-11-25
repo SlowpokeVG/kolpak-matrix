@@ -3,12 +3,12 @@
 //   state: "done" | "now" | "todo"
 //   part:  0..1, how far the "now" step is (optional)
 window.KOLPAK_PROGRESS = {
-  now: "kolpak sends voice: mic picker, level meter, push to talk, voice activity. hearing others is next",
+  now: "mumble both ways over udp: hear and be heard, noise suppression, global push to talk",
   steps: [
     { name: "docs",    state: "done" },
     { name: "fork",    state: "now", part: 0.85 },
     { name: "styling", state: "done" },
-    { name: "mumble",  state: "now", part: 0.6 },
+    { name: "mumble",  state: "now", part: 0.9 },
     { name: "streams", state: "now", part: 0.15 },
     { name: "design",  state: "now", part: 0.5 },
     { name: "mobile",  state: "todo" }

@@ -10,9 +10,8 @@ import './voice-dock.css';
 // outline, with join and leave. Click a channel's name to move there; click its marker to
 // fold it. The stream half of the dock is not built yet.
 //
-// Your microphone is sent when the mic button is on (and the transmit mode lets it
-// through); your own name turns green while it is. Other people's voice is not played
-// yet, so the deafen button only changes the icon others see.
+// Your microphone is sent when the mic button is on and the transmit mode lets it
+// through. Whoever is speaking, you included, is shown in green. Deafening stops playback.
 
 const INDENT_PX = 17;
 
@@ -21,7 +20,14 @@ export function VoiceDock() {
   const settings = useVoiceSettings();
   const [collapsed, setCollapsed] = useState<ReadonlySet<number>>(() => new Set());
 
-  const rows = useMemo(() => buildTreeRows(voice.snapshot, collapsed), [voice.snapshot, collapsed]);
+  const rows = useMemo(
+    () =>
+      buildTreeRows(voice.snapshot, collapsed, {
+        talking: voice.talking,
+        transmitting: voice.transmitting,
+      }),
+    [voice.snapshot, collapsed, voice.talking, voice.transmitting]
+  );
 
   const toggleFold = useCallback((id: number) => {
     setCollapsed((previous) => {
@@ -109,7 +115,7 @@ export function VoiceDock() {
                   className="kolpak-tree__row kolpak-tree__row--user"
                   data-state={row.state}
                   data-self={row.self ? 'true' : undefined}
-                  data-talking={row.self && voice.transmitting ? 'true' : undefined}
+                  data-talking={row.talking ? 'true' : undefined}
                   style={{ paddingLeft: row.depth * INDENT_PX }}
                 >
                   <span className="kolpak-tree__user">
@@ -122,6 +128,7 @@ export function VoiceDock() {
           </ul>
 
           {voice.captureError && <p className="kolpak-dock__note">{voice.captureError}.</p>}
+          {voice.outputError && <p className="kolpak-dock__note">{voice.outputError}.</p>}
           <div className="kolpak-dock__controls">
             <button
               type="button"

@@ -42,6 +42,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         password: None,
         pinned_fingerprint: None,
         client_name: format!("Kolpak {} (spike)", env!("CARGO_PKG_VERSION")),
+        join_muted: false,
         // Joining unmuted: this example exists to be heard.
         join_deafened: false,
     })

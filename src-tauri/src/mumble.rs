@@ -1,22 +1,30 @@
 //! Kolpak: the bridge between the webview and the Mumble client (crates/kolpak-mumble).
 //!
 //! The webview sends commands and receives state; it never sees audio (AI/SPEC.md §3, §5.5).
-//! Built so far: the control connection and the sending half of voice. The microphone is
-//! captured, gated and encoded on the Rust side and tunnelled through the control
-//! connection. Nothing is played back yet.
+//! Built so far: the control connection and voice in both directions. The microphone is
+//! captured, gated and encoded on the Rust side; incoming voice is decoded, mixed and
+//! played on the Rust side. Voice travels over the encrypted UDP channel when that gets
+//! through, and tunnelled through the control connection when it does not.
 //!
 //! Events:
 //!   mumble://state     { status, session?, serverVersion?, error? }
 //!   mumble://snapshot  { session, channels, users }   the whole tree, on every change
 //!   mumble://stats     { pingMs }
 //!   mumble://text      { actor?, message }
-//!   audio://levels     { input, transmitting }        about ten times a second while connected
-//!   audio://capture    { deviceName?, error? }        when the microphone opens or fails
+//!   mumble://transport { udp }                        voice switched between UDP and the tunnel
+//!   mumble://talking   { sessions }                   who is speaking, when it changes
+//!   audio://levels     { input, output, transmitting }  about ten times a second while connected
+//!   audio://capture    { deviceName?, error?, outputDeviceName?, outputError? }
+//!                                                     when a device opens or fails
 
+use std::collections::HashSet;
+use std::sync::atomic::{AtomicU32, Ordering};
 use std::sync::Arc;
 use std::time::Duration;
 
 use kolpak_mumble::audio::{list_input_devices, pump_voice, Capture, Controls};
+use kolpak_mumble::key_state;
+use kolpak_mumble::playback::{list_output_devices, Mixer, Playback};
 // Aliased so the generated TypeScript bindings can map it by a name that is ours
 // (tauri.conf.json, plugins.typegen.typeMappings); the real shape is typed by hand in
 // src/kolpak/voice/types.ts.
@@ -32,10 +40,14 @@ const EVENT_STATE: &str = "mumble://state";
 const EVENT_SNAPSHOT: &str = "mumble://snapshot";
 const EVENT_STATS: &str = "mumble://stats";
 const EVENT_TEXT: &str = "mumble://text";
+const EVENT_TALKING: &str = "mumble://talking";
+const EVENT_TRANSPORT: &str = "mumble://transport";
 const EVENT_LEVELS: &str = "audio://levels";
 const EVENT_CAPTURE: &str = "audio://capture";
 
 const LEVELS_INTERVAL: Duration = Duration::from_millis(100);
+/// How often the push-to-talk key is read. 10 ms is half a voice frame.
+const PTT_POLL_INTERVAL: Duration = Duration::from_millis(10);
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Default)]
 #[serde(rename_all = "camelCase")]
@@ -78,6 +90,8 @@ pub struct MumbleTextPayload {
 pub struct AudioLevelsPayload {
     /// RMS of the most recent microphone frame, 0.0 to 1.0.
     pub input: f32,
+    /// RMS of the most recent block played, 0.0 to 1.0.
+    pub output: f32,
     /// Whether that frame was sent.
     pub transmitting: bool,
 }
@@ -89,6 +103,24 @@ pub struct AudioCapturePayload {
     pub device_name: Option<String>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub error: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub output_device_name: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub output_error: Option<String>,
+}
+
+#[derive(Debug, Clone, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct MumbleTransportPayload {
+    /// True while voice uses the UDP channel; false while it is tunnelled over TCP.
+    pub udp: bool,
+}
+
+#[derive(Debug, Clone, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct MumbleTalkingPayload {
+    /// Sessions of the people speaking right now, not counting ourselves.
+    pub sessions: Vec<u32>,
 }
 
 /// Everything a webview needs to draw the voice UI after a reload, since events are not replayed.
@@ -100,6 +132,8 @@ pub struct MumbleFullState {
     #[serde(skip_serializing_if = "Option::is_none")]
     pub ping_ms: Option<f32>,
     pub capture: AudioCapturePayload,
+    /// True while voice uses the UDP channel.
+    pub udp: bool,
 }
 
 /// The microphone side of a live connection. Dropping it closes the microphone.
@@ -115,12 +149,24 @@ struct Inner {
     generation: u64,
     client: Option<Client>,
     audio: Option<AudioSession>,
+    /// Everyone we can hear. Lives for the whole connection; the output stream that plays
+    /// it can be reopened on another device.
+    mixer: Option<Arc<Mixer>>,
+    playback: Option<Playback>,
     full: MumbleFullState,
     // Transmit settings. They outlive connections so a change made while disconnected
     // applies to the next one.
     mode: TransmitMode,
     vad_threshold: Option<f32>,
     input_device: Option<String>,
+    output_device: Option<String>,
+    /// 0.0 to 2.0; absent means unchanged (1.0).
+    output_volume: Option<f32>,
+    /// Virtual-key code of the push-to-talk key, 0 for none. Shared with the task that
+    /// reads the key, so a rebind applies without restarting anything.
+    ptt_key: Arc<AtomicU32>,
+    /// Noise suppression on the microphone; absent means on.
+    denoise: Option<bool>,
 }
 
 #[derive(Default)]
@@ -157,6 +203,10 @@ pub struct MumbleTransmitArgs {
     pub vad_threshold: Option<f32>,
     /// Input device ID from `audio_list_input_devices`; empty or absent for the default.
     pub input_device: Option<String>,
+    /// `KeyboardEvent.code` of the push-to-talk key; empty or absent for none.
+    pub ptt_key: Option<String>,
+    /// Noise suppression on the microphone; absent leaves it as it is.
+    pub noise_suppression: Option<bool>,
 }
 
 fn parse_mode(mode: &str) -> Result<TransmitMode, String> {
@@ -186,6 +236,24 @@ fn describe_disconnect(reason: &Disconnect) -> Option<String> {
             _ => reason.clone(),
         }),
     }
+}
+
+#[derive(Debug, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct MumbleOutputArgs {
+    /// Output device ID from `audio_list_output_devices`; empty or absent for the default.
+    pub output_device: Option<String>,
+    /// 0.0 to 2.0, where 1.0 leaves the level unchanged.
+    pub volume: Option<f32>,
+}
+
+/// Whether the server's view of us means we must not play anything.
+fn is_deafened(snapshot: &MumbleSnapshot) -> bool {
+    snapshot
+        .users
+        .iter()
+        .find(|user| Some(user.session) == snapshot.session)
+        .is_some_and(|me| me.self_deaf || me.deaf)
 }
 
 /// Whether the server's view of us means our microphone must stay closed.
@@ -221,17 +289,24 @@ async fn start_audio<R: Runtime>(
     generation: u64,
     client: Client,
 ) {
-    let (mode, vad_threshold, device) = {
+    let (mode, vad_threshold, device, ptt_key, denoise) = {
         let guard = inner.lock().await;
         if guard.generation != generation {
             return;
         }
-        (guard.mode, guard.vad_threshold, guard.input_device.clone())
+        (
+            guard.mode,
+            guard.vad_threshold,
+            guard.input_device.clone(),
+            guard.ptt_key.clone(),
+            guard.denoise,
+        )
     };
     let controls = Arc::new(Controls::new(mode));
     if let Some(threshold) = vad_threshold {
         controls.set_vad_threshold(threshold);
     }
+    controls.set_denoise(denoise.unwrap_or(true));
 
     let (frame_tx, frame_rx) = tokio::sync::mpsc::unbounded_channel();
     let capture_controls = controls.clone();
@@ -241,58 +316,68 @@ async fn start_audio<R: Runtime>(
     })
     .await;
 
-    let (capture, payload) = match opened {
+    let (capture, device_name, error) = match opened {
         Ok(Ok(capture)) => {
-            let payload = AudioCapturePayload {
-                device_name: Some(capture.info.device_name.clone()),
-                error: None,
-            };
-            (Some(capture), payload)
+            let name = capture.info.device_name.clone();
+            (Some(capture), Some(name), None)
         }
-        Ok(Err(error)) => (
-            None,
-            AudioCapturePayload {
-                device_name: None,
-                error: Some(error.to_string()),
-            },
-        ),
-        Err(error) => (
-            None,
-            AudioCapturePayload {
-                device_name: None,
-                error: Some(error.to_string()),
-            },
-        ),
+        Ok(Err(error)) => (None, None, Some(error.to_string())),
+        Err(error) => (None, None, Some(error.to_string())),
     };
-    if let Some(error) = &payload.error {
+    if let Some(error) = &error {
         log::warn!("mumble: microphone unavailable: {error}");
     }
 
-    {
+    let payload = {
         let mut guard = inner.lock().await;
         if guard.generation != generation {
             // Dropping `capture` here closes the microphone again.
             return;
         }
         controls.set_muted(is_muted(&guard.full.snapshot));
-        guard.full.capture = payload.clone();
+        guard.full.capture.device_name = device_name;
+        guard.full.capture.error = error;
         guard.audio = Some(AudioSession {
             controls: controls.clone(),
             _capture: capture,
         });
-    }
+        guard.full.capture.clone()
+    };
     let _ = app.emit(EVENT_CAPTURE, payload);
 
     tauri::async_runtime::spawn(pump_voice(client, frame_rx));
+
+    // Push to talk from anywhere: read the key's state, which works while another app has
+    // focus and does not take the key away from it. Ends when this microphone session does.
+    if key_state::is_supported() {
+        let session = Arc::downgrade(&controls);
+        tauri::async_runtime::spawn(async move {
+            let mut was_down = false;
+            loop {
+                tokio::time::sleep(PTT_POLL_INTERVAL).await;
+                let Some(controls) = session.upgrade() else {
+                    break;
+                };
+                let key = ptt_key.load(Ordering::Relaxed);
+                let down = key != 0
+                    && controls.mode() == TransmitMode::Ptt
+                    && key_state::is_key_down(key as u16).unwrap_or(false);
+                if down != was_down {
+                    was_down = down;
+                    controls.set_ptt(down);
+                }
+            }
+        });
+    }
 
     // Level meter and talking light for the UI.
     let levels_app = app.clone();
     let levels_inner = inner.clone();
     tauri::async_runtime::spawn(async move {
-        let mut last = (f32::NAN, false);
+        let mut last = (f32::NAN, f32::NAN, false);
         loop {
             tokio::time::sleep(LEVELS_INTERVAL).await;
-            {
+            let output = {
                 let guard = levels_inner.lock().await;
                 let same_session = guard
                     .audio
@@ -301,19 +386,122 @@ async fn start_audio<R: Runtime>(
                 if guard.generation != generation || !same_session {
                     break;
                 }
-            }
-            let now = (controls.level(), controls.is_transmitting());
+                guard.mixer.as_ref().map_or(0.0, |mixer| mixer.level())
+            };
+            let now = (controls.level(), output, controls.is_transmitting());
             if now != last {
                 last = now;
                 let _ = levels_app.emit(
                     EVENT_LEVELS,
                     AudioLevelsPayload {
                         input: now.0,
-                        transmitting: now.1,
+                        output: now.1,
+                        transmitting: now.2,
                     },
                 );
             }
         }
+    });
+}
+
+/// Open the output device for the connection `generation` and play the mixer through it.
+async fn open_playback<R: Runtime>(app: &AppHandle<R>, inner: &Arc<Mutex<Inner>>, generation: u64) {
+    let (mixer, device) = {
+        let mut guard = inner.lock().await;
+        if guard.generation != generation {
+            return;
+        }
+        // Close the old stream first; two streams would play the same audio twice.
+        guard.playback = None;
+        let Some(mixer) = guard.mixer.clone() else {
+            return;
+        };
+        (mixer, guard.output_device.clone())
+    };
+    let opened = tauri::async_runtime::spawn_blocking(move || Playback::start(device, mixer)).await;
+    let (playback, name, error) = match opened {
+        Ok(Ok(playback)) => {
+            let name = playback.info.device_name.clone();
+            (Some(playback), Some(name), None)
+        }
+        Ok(Err(error)) => (None, None, Some(error.to_string())),
+        Err(error) => (None, None, Some(error.to_string())),
+    };
+    if let Some(error) = &error {
+        log::warn!("mumble: output device unavailable: {error}");
+    }
+    let payload = {
+        let mut guard = inner.lock().await;
+        if guard.generation != generation {
+            return;
+        }
+        guard.playback = playback;
+        guard.full.capture.output_device_name = name;
+        guard.full.capture.output_error = error;
+        guard.full.capture.clone()
+    };
+    let _ = app.emit(EVENT_CAPTURE, payload);
+}
+
+/// Start hearing: a mixer for the connection, a task feeding it from the wire, the output
+/// stream, and a task reporting who is talking.
+async fn start_playback<R: Runtime>(
+    app: &AppHandle<R>,
+    inner: &Arc<Mutex<Inner>>,
+    generation: u64,
+    mut voice: tokio::sync::mpsc::UnboundedReceiver<bytes::Bytes>,
+) {
+    let mixer = Arc::new(Mixer::new());
+    {
+        let mut guard = inner.lock().await;
+        if guard.generation != generation {
+            return;
+        }
+        if let Some(volume) = guard.output_volume {
+            mixer.set_volume(volume);
+        }
+        mixer.set_silenced(is_deafened(&guard.full.snapshot));
+        guard.mixer = Some(mixer.clone());
+    }
+
+    // Decoding happens here, off the audio thread; the channel ends with the connection.
+    let feed = mixer.clone();
+    tauri::async_runtime::spawn(async move {
+        while let Some(packet) = voice.recv().await {
+            feed.push_packet(&packet);
+        }
+    });
+
+    open_playback(app, inner, generation).await;
+
+    let talking_app = app.clone();
+    let talking_inner = inner.clone();
+    tauri::async_runtime::spawn(async move {
+        let mut last: Vec<u32> = Vec::new();
+        loop {
+            tokio::time::sleep(LEVELS_INTERVAL).await;
+            {
+                let guard = talking_inner.lock().await;
+                let same = guard
+                    .mixer
+                    .as_ref()
+                    .is_some_and(|current| Arc::ptr_eq(current, &mixer));
+                if guard.generation != generation || !same {
+                    break;
+                }
+            }
+            let now = mixer.talking();
+            if now != last {
+                last.clone_from(&now);
+                let _ = talking_app.emit(EVENT_TALKING, MumbleTalkingPayload { sessions: now });
+            }
+        }
+        let _ = talking_app.emit(
+            EVENT_TALKING,
+            MumbleTalkingPayload {
+                sessions: Vec::new(),
+            },
+        );
     });
 }
 
@@ -332,6 +520,8 @@ pub async fn mumble_connect<R: Runtime>(
             previous.disconnect().await;
         }
         guard.audio = None;
+        guard.playback = None;
+        guard.mixer = None;
         guard.generation += 1;
         guard.full = MumbleFullState {
             state: MumbleStatePayload {
@@ -357,9 +547,10 @@ pub async fn mumble_connect<R: Runtime>(
         password: args.password.filter(|password| !password.is_empty()),
         pinned_fingerprint: args.pinned_fingerprint.filter(|pin| !pin.trim().is_empty()),
         client_name: format!("Kolpak {}", app.package_info().version),
-        // Nothing is played back yet, so we join deafened, which also mutes. Unmuting in
-        // the UI opens the microphone.
-        join_deafened: true,
+        // Join hearing but with the microphone closed, so nothing is sent until the user
+        // opens it. Deafening in the UI stops playback too.
+        join_muted: true,
+        join_deafened: false,
     };
 
     let connection = match connect(options).await {
@@ -394,6 +585,7 @@ pub async fn mumble_connect<R: Runtime>(
     }
 
     let mut events = connection.events;
+    let mut voice = Some(connection.voice);
     tauri::async_runtime::spawn(async move {
         while let Some(event) = events.recv().await {
             match event {
@@ -410,6 +602,9 @@ pub async fn mumble_connect<R: Runtime>(
                         full.state.error = None;
                     })
                     .await;
+                    if let Some(voice) = voice.take() {
+                        start_playback(&app, &inner, generation, voice).await;
+                    }
                     start_audio(&app, &inner, generation, client.clone()).await;
                 }
                 Event::State(snapshot) => {
@@ -420,6 +615,12 @@ pub async fn mumble_connect<R: Runtime>(
                         }
                         if let Some(audio) = &guard.audio {
                             audio.controls.set_muted(is_muted(&snapshot));
+                        }
+                        if let Some(mixer) = &guard.mixer {
+                            mixer.set_silenced(is_deafened(&snapshot));
+                            let present: HashSet<u32> =
+                                snapshot.users.iter().map(|user| user.session).collect();
+                            mixer.retain_sessions(&present);
                         }
                         guard.full.snapshot = snapshot.clone();
                     }
@@ -435,6 +636,16 @@ pub async fn mumble_connect<R: Runtime>(
                     }
                     let _ = app.emit(EVENT_STATS, MumbleStatsPayload { ping_ms: rtt_ms });
                 }
+                Event::Udp { active } => {
+                    {
+                        let mut guard = inner.lock().await;
+                        if guard.generation != generation {
+                            continue;
+                        }
+                        guard.full.udp = active;
+                    }
+                    let _ = app.emit(EVENT_TRANSPORT, MumbleTransportPayload { udp: active });
+                }
                 Event::Text { actor, message } => {
                     let _ = app.emit(EVENT_TEXT, MumbleTextPayload { actor, message });
                 }
@@ -448,6 +659,8 @@ pub async fn mumble_connect<R: Runtime>(
                         if guard.generation == generation {
                             guard.client = None;
                             guard.audio = None;
+                            guard.playback = None;
+                            guard.mixer = None;
                         }
                     }
                     set_state(&app, &inner, generation, |full| {
@@ -481,6 +694,8 @@ pub async fn mumble_disconnect<R: Runtime>(
         guard.generation += 1;
         guard.full = MumbleFullState::default();
         guard.audio = None;
+        guard.playback = None;
+        guard.mixer = None;
         guard.client.take()
     };
     if let Some(client) = client {
@@ -540,12 +755,24 @@ pub async fn mumble_set_transmit<R: Runtime>(
         let mut guard = inner.lock().await;
         guard.mode = mode;
         guard.vad_threshold = args.vad_threshold;
+        let key = args
+            .ptt_key
+            .as_deref()
+            .and_then(key_state::virtual_key_from_code)
+            .unwrap_or(0);
+        guard.ptt_key.store(u32::from(key), Ordering::Relaxed);
+        if args.noise_suppression.is_some() {
+            guard.denoise = args.noise_suppression;
+        }
         let device_changed = guard.input_device != device;
         guard.input_device = device;
         if let Some(audio) = &guard.audio {
             audio.controls.set_mode(mode);
             if let Some(threshold) = args.vad_threshold {
                 audio.controls.set_vad_threshold(threshold);
+            }
+            if let Some(enabled) = args.noise_suppression {
+                audio.controls.set_denoise(enabled);
             }
         }
         if device_changed && guard.audio.is_some() {
@@ -565,17 +792,64 @@ pub async fn mumble_set_transmit<R: Runtime>(
     Ok(())
 }
 
-/// Push-to-talk key state. Only matters in push-to-talk mode.
+/// Output device and volume. Takes effect at once when connected (changing the device
+/// reopens it) and is kept for the next connection.
+#[tauri::command]
+pub async fn mumble_set_output<R: Runtime>(
+    app: AppHandle<R>,
+    state: State<'_, MumbleState>,
+    args: MumbleOutputArgs,
+) -> Result<(), String> {
+    let inner = state.inner.clone();
+    let device = args.output_device.filter(|id| !id.is_empty());
+    let reopen = {
+        let mut guard = inner.lock().await;
+        guard.output_volume = args.volume;
+        if let (Some(mixer), Some(volume)) = (&guard.mixer, args.volume) {
+            mixer.set_volume(volume);
+        }
+        let device_changed = guard.output_device != device;
+        guard.output_device = device;
+        (device_changed && guard.mixer.is_some()).then_some(guard.generation)
+    };
+    if let Some(generation) = reopen {
+        open_playback(&app, &inner, generation).await;
+    }
+    Ok(())
+}
+
+#[tauri::command]
+pub async fn audio_list_output_devices() -> Result<Vec<AudioInputDevice>, String> {
+    let devices = tauri::async_runtime::spawn_blocking(list_output_devices)
+        .await
+        .map_err(|error| error.to_string())?
+        .map_err(|error| error.to_string())?;
+    Ok(devices
+        .into_iter()
+        .map(|device| AudioInputDevice {
+            id: device.id,
+            name: device.name,
+            is_default: device.is_default,
+        })
+        .collect())
+}
+
+/// Push-to-talk key state as seen by the webview, which only knows about keys pressed
+/// while its own window has focus. Used where the key cannot be read system-wide; where it
+/// can, the native reading is the only source, so the two never disagree.
 #[tauri::command]
 pub async fn mumble_ptt(state: State<'_, MumbleState>, down: bool) -> Result<(), String> {
+    if key_state::is_supported() {
+        return Ok(());
+    }
     if let Some(audio) = &state.inner.lock().await.audio {
         audio.controls.set_ptt(down);
     }
     Ok(())
 }
 
-/// A microphone the user can pick. Mirrors the crate's type so the generated TypeScript
-/// bindings get a real interface for it.
+/// A microphone or an output the user can pick. Mirrors the crate's type so the generated
+/// TypeScript bindings get a real interface for it.
 #[derive(Debug, Clone, Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct AudioInputDevice {
@@ -662,6 +936,29 @@ mod tests {
             json,
             serde_json::json!({ "status": "connected", "session": 7, "serverVersion": "1.5.634" })
         );
+    }
+
+    #[test]
+    fn playback_stops_only_when_we_are_deafened() {
+        assert!(!is_deafened(&MumbleSnapshot::default()));
+        let mut snapshot = MumbleSnapshot {
+            session: Some(2),
+            channels: Vec::new(),
+            users: vec![user(1), user(2)],
+        };
+        assert!(!is_deafened(&snapshot));
+        // Muted is not deafened: we still hear.
+        snapshot.users[1].self_mute = true;
+        assert!(!is_deafened(&snapshot));
+        snapshot.users[1].self_deaf = true;
+        assert!(is_deafened(&snapshot));
+        snapshot.users[1].self_deaf = false;
+        snapshot.users[1].deaf = true;
+        assert!(is_deafened(&snapshot));
+        // Someone else being deafened is not our business.
+        snapshot.users[1].deaf = false;
+        snapshot.users[0].self_deaf = true;
+        assert!(!is_deafened(&snapshot));
     }
 
     #[test]

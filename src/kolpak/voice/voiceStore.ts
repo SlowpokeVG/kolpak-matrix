@@ -36,11 +36,28 @@ const applyStatePayload = (payload: VoiceStatePayload): void => {
           transmitting: false,
           captureDevice: undefined,
           captureError: undefined,
+          outputLevel: 0,
+          outputDevice: undefined,
+          outputError: undefined,
+          talking: [],
+          udp: false,
         }),
   });
 };
 
-type CapturePayload = { deviceName?: string; error?: string };
+type CapturePayload = {
+  deviceName?: string;
+  error?: string;
+  outputDeviceName?: string;
+  outputError?: string;
+};
+
+const captureState = (payload: CapturePayload | undefined) => ({
+  captureDevice: payload?.deviceName,
+  captureError: payload?.error,
+  outputDevice: payload?.outputDeviceName,
+  outputError: payload?.outputError,
+});
 
 export type InputDevice = { id: string; name: string; isDefault: boolean };
 
@@ -49,6 +66,9 @@ export type TransmitSettings = {
   vadThreshold: number;
   /** '' for the system default. */
   inputDevice: string;
+  /** `KeyboardEvent.code`, or '' for none. */
+  pttKey: string;
+  noiseSuppression: boolean;
 };
 
 let bridge: Promise<UnlistenFn[]> | undefined;
@@ -62,12 +82,18 @@ export function startVoiceBridge(): void {
     listen<{ pingMs: number }>('mumble://stats', (event) =>
       setState({ pingMs: event.payload.pingMs })
     ),
-    listen<{ input: number; transmitting: boolean }>('audio://levels', (event) =>
-      setState({ inputLevel: event.payload.input, transmitting: event.payload.transmitting })
+    listen<{ input: number; output?: number; transmitting: boolean }>('audio://levels', (event) =>
+      setState({
+        inputLevel: event.payload.input,
+        outputLevel: event.payload.output ?? 0,
+        transmitting: event.payload.transmitting,
+      })
     ),
-    listen<CapturePayload>('audio://capture', (event) =>
-      setState({ captureDevice: event.payload.deviceName, captureError: event.payload.error })
+    listen<CapturePayload>('audio://capture', (event) => setState(captureState(event.payload))),
+    listen<{ sessions: number[] }>('mumble://talking', (event) =>
+      setState({ talking: event.payload.sessions })
     ),
+    listen<{ udp: boolean }>('mumble://transport', (event) => setState({ udp: event.payload.udp })),
   ]);
   // Events are not replayed, so a freshly loaded webview asks once for where things stand.
   invoke<{
@@ -75,6 +101,7 @@ export function startVoiceBridge(): void {
     snapshot: VoiceSnapshot;
     pingMs?: number;
     capture?: CapturePayload;
+    udp?: boolean;
   }>('mumble_get_state')
     .then((full) => {
       applyStatePayload(full.state);
@@ -82,8 +109,8 @@ export function startVoiceBridge(): void {
         setState({
           snapshot: full.snapshot,
           pingMs: full.pingMs,
-          captureDevice: full.capture?.deviceName,
-          captureError: full.capture?.error,
+          udp: full.udp ?? false,
+          ...captureState(full.capture),
         });
       }
     })
@@ -145,8 +172,23 @@ export async function applyTransmitSettings(settings: TransmitSettings): Promise
       mode: settings.mode,
       vadThreshold: settings.vadThreshold,
       inputDevice: settings.inputDevice || null,
+      pttKey: settings.pttKey || null,
+      noiseSuppression: settings.noiseSuppression,
     },
   }).catch(() => undefined);
+}
+
+/** Output device ('' for the system default) and volume, 0 to 2. */
+export async function applyOutputSettings(outputDevice: string, volume: number): Promise<void> {
+  if (!isDesktopTauri()) return;
+  await invoke('mumble_set_output', {
+    args: { outputDevice: outputDevice || null, volume },
+  }).catch(() => undefined);
+}
+
+export async function listOutputDevices(): Promise<InputDevice[]> {
+  if (!isDesktopTauri()) return [];
+  return invoke<InputDevice[]>('audio_list_output_devices').catch(() => []);
 }
 
 /** Tell the native side whether the push-to-talk key is held. */

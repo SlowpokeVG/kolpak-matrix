@@ -88,6 +88,20 @@ describe('buildTreeRows', () => {
     ]);
   });
 
+  it('marks other speakers from the talking list and ourselves from the transmit state', () => {
+    const talkingNames = (speaking: { talking: number[]; transmitting: boolean }) =>
+      buildTreeRows(snapshot, new Set(), speaking).flatMap((row) =>
+        row.kind === 'user' && row.talking ? [row.name] : []
+      );
+    expect(talkingNames({ talking: [1, 2], transmitting: false })).toEqual(['amy', 'bob']);
+    expect(talkingNames({ talking: [], transmitting: true })).toEqual(['me']);
+    // Our own session in the list does not count: the server does not echo us.
+    expect(talkingNames({ talking: [3], transmitting: false })).toEqual([]);
+    expect(
+      buildTreeRows(snapshot, new Set()).some((row) => row.kind === 'user' && row.talking)
+    ).toBe(false);
+  });
+
   it('is empty before any state has arrived', () => {
     expect(buildTreeRows({ session: null, channels: [], users: [] }, new Set())).toEqual([]);
   });

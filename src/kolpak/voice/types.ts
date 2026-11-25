@@ -57,6 +57,16 @@ export type VoiceState = {
   captureDevice?: string;
   /** Why the microphone could not be opened. */
   captureError?: string;
+  /** RMS of the latest block played, 0 to 1. */
+  outputLevel: number;
+  /** The output device in use, once it has opened. */
+  outputDevice?: string;
+  /** Why the output device could not be opened. */
+  outputError?: string;
+  /** Sessions of the other people speaking right now. */
+  talking: readonly number[];
+  /** True while voice uses the low-delay UDP channel, false while it is tunnelled. */
+  udp: boolean;
 };
 
 export const EMPTY_SNAPSHOT: VoiceSnapshot = { session: null, channels: [], users: [] };
@@ -66,6 +76,9 @@ export const INITIAL_VOICE_STATE: VoiceState = {
   snapshot: EMPTY_SNAPSHOT,
   inputLevel: 0,
   transmitting: false,
+  outputLevel: 0,
+  talking: [],
+  udp: false,
 };
 
 /** The channel we are in and how many people are in it, for the status bar. */

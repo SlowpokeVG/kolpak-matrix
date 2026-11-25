@@ -24,6 +24,8 @@ export type TreeRow =
       self: boolean;
       /** 'deafened' implies muted. */
       state: 'open' | 'muted' | 'deafened';
+      /** Speaking right now. */
+      talking: boolean;
     };
 
 export function userState(user: VoiceUser): 'open' | 'muted' | 'deafened' {
@@ -36,7 +38,15 @@ export function userState(user: VoiceUser): 'open' | 'muted' | 'deafened' {
  * Rows in display order. Channels arrive parents-first, so a channel's depth is its
  * parent's plus one. Everything under a collapsed channel is left out.
  */
-export function buildTreeRows(snapshot: VoiceSnapshot, collapsed: ReadonlySet<number>): TreeRow[] {
+export function buildTreeRows(
+  snapshot: VoiceSnapshot,
+  collapsed: ReadonlySet<number>,
+  /** Sessions of other people speaking, and whether we are being sent ourselves. */
+  speaking: { talking: readonly number[]; transmitting: boolean } = {
+    talking: [],
+    transmitting: false,
+  }
+): TreeRow[] {
   const depthOf = new Map<number, number>();
   const hiddenUnder = new Set<number>();
   const me = snapshot.users.find((user) => user.session === snapshot.session);
@@ -76,6 +86,10 @@ export function buildTreeRows(snapshot: VoiceSnapshot, collapsed: ReadonlySet<nu
         depth: depth + 1,
         self: user.session === snapshot.session,
         state: userState(user),
+        talking:
+          user.session === snapshot.session
+            ? speaking.transmitting
+            : speaking.talking.includes(user.session),
       });
     }
   }

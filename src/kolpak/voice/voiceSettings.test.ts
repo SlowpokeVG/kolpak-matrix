@@ -14,6 +14,9 @@ describe('resolveVoiceSettings', () => {
       pttKey: '',
       inputDevice: '',
       vadThreshold: 0.02,
+      outputDevice: '',
+      outputVolume: 1,
+      noiseSuppression: true,
     });
   });
 
@@ -42,8 +45,10 @@ describe('sanitizeStoredVoiceSettings', () => {
         pttKey: 'CapsLock',
         inputDevice: 'mic-1',
         vadThreshold: 3,
+        outputDevice: 'out-1',
+        outputVolume: 9,
       })
-    ).toEqual({ host: 'h', pttKey: 'CapsLock', inputDevice: 'mic-1' });
+    ).toEqual({ host: 'h', pttKey: 'CapsLock', inputDevice: 'mic-1', outputDevice: 'out-1' });
   });
 
   it('returns nothing for values that are not objects', () => {

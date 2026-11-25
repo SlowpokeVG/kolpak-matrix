@@ -20,6 +20,12 @@ export type VoiceSettings = {
   inputDevice: string;
   /** Voice-activity threshold: RMS level, 0 to 1, above which the microphone opens. */
   vadThreshold: number;
+  /** Output device ID from the native side, or '' for the system default. */
+  outputDevice: string;
+  /** Output volume, 0 to 2, where 1 leaves voices as they arrive. */
+  outputVolume: number;
+  /** Remove steady background noise from the microphone. */
+  noiseSuppression: boolean;
 };
 
 export type StoredVoiceSettings = Partial<VoiceSettings>;
@@ -31,6 +37,7 @@ export const TRANSMIT_MODES: readonly TransmitMode[] = ['ptt', 'vad', 'continuou
 export const DEFAULT_VAD_THRESHOLD = 0.02;
 /** The slider's range. Speech into a headset is usually between 0.02 and 0.3. */
 export const MAX_VAD_THRESHOLD = 0.2;
+export const MAX_OUTPUT_VOLUME = 2;
 
 const STORAGE_KEY = 'kolpak:voice:settings';
 
@@ -54,6 +61,15 @@ export function sanitizeStoredVoiceSettings(raw: unknown): StoredVoiceSettings {
   if (typeof src.vadThreshold === 'number' && src.vadThreshold >= 0 && src.vadThreshold <= 1) {
     out.vadThreshold = src.vadThreshold;
   }
+  if (typeof src.outputDevice === 'string') out.outputDevice = src.outputDevice;
+  if (
+    typeof src.outputVolume === 'number' &&
+    src.outputVolume >= 0 &&
+    src.outputVolume <= MAX_OUTPUT_VOLUME
+  ) {
+    out.outputVolume = src.outputVolume;
+  }
+  if (typeof src.noiseSuppression === 'boolean') out.noiseSuppression = src.noiseSuppression;
   return out;
 }
 
@@ -71,6 +87,9 @@ export function resolveVoiceSettings(
     pttKey: stored.pttKey ?? '',
     inputDevice: stored.inputDevice ?? '',
     vadThreshold: stored.vadThreshold ?? DEFAULT_VAD_THRESHOLD,
+    outputDevice: stored.outputDevice ?? '',
+    outputVolume: stored.outputVolume ?? 1,
+    noiseSuppression: stored.noiseSuppression ?? true,
   };
 }
 
