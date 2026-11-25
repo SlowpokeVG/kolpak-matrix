@@ -3,7 +3,7 @@
 //   state: "done" | "now" | "todo"
 //   part:  0..1, how far the "now" step is (optional)
 window.KOLPAK_PROGRESS = {
-  now: "chat: \"дать пососать\" in the message menu, sends /me with a mention",
+  now: "CI: Kolpak builds on every push to main (Windows, Linux, macOS)",
   steps: [
     { name: "docs",    state: "done" },
     { name: "fork",    state: "now", part: 0.85 },

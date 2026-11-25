@@ -293,6 +293,14 @@ Asked for by the owner: the menu on someone else's message (Sable's message opti
 
 Code: `src/kolpak/chat/givePososat.ts` (content, the check, the send) and `PososatItem.tsx`; Sable's `Options.tsx` gains one import and one line. Tests: content shape, escaping, naming, when it is offered. Checked live by the owner, who sent two from the running app; they render as emotes with a mention pill.
 
+### 2026-11-25 — CI: build on main
+
+The inherited workflows were Sable's: they ran on a `dev` branch and on tags, deployed to Sable's Cloudflare account through OpenTofu, uploaded to Sable's Sentry, and published releases to Sable's AUR, Flathub and Homebrew channels. On our pull requests into `main` they failed for want of Sable's variables and keys (the `TF_HTTP_*` / `TF_VAR_*` / `SENTRY_*` "missing required GitHub Environment variables" error is the Cloudflare deploy), and nothing built the app.
+
+Now: `.github/workflows/build.yml` builds the desktop app on every push to `main` and on pull requests into it, for Windows, Linux and macOS (`pnpm tauri:wry build --no-updater`), and attaches the installers to the run for 14 days. No signing, updater or publishing. The quality, Rust and CodeQL checks run on `main` (the Rust ones also when `crates/` changes). Sable's deploy, release, changeset, Docker, PR-comment-build and Nix workflows and their helper actions are gone. Linux needs the ALSA headers for the voice audio (`libasound2-dev`), now in the Rust job and in `mise.tauri.toml`. `AI/` is left out of formatting and Knip (the mockups must stay byte for byte).
+
+Still red, untouched: the Playwright end-to-end tests on pull requests (not investigated; likely they expect Sable's text and look). Their push trigger still names `dev`, so they never run on `main`. Locally on Windows, `fmt:check` also flags `CLAUDE.md`, `COPILOT.md` and `.github/copilot-instructions.md`: they are symlinks to `AGENTS.md` that Windows checks out as one-line files; CI on Linux sees real links.
+
 ## Spike 2 log (Mumble)
 
 ### 2026-11-25 — control connection, channel tree, dock, settings
