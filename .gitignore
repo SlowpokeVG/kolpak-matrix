@@ -74,3 +74,6 @@ src-tauri/icons/generated/
 # Rendered by render-flatpak-nightly.mjs
 packaging/flatpak/nightly/moe.sable.client.Nightly.yml
 packaging/flatpak/nightly/moe.sable.client.Nightly.metainfo.xml
+
+# Kolpak: local-only secrets (test account recovery keys and the like). Never commit.
+.secrets/

@@ -3,7 +3,7 @@
 //   state: "done" | "now" | "todo"
 //   part:  0..1, how far the "now" step is (optional)
 window.KOLPAK_PROGRESS = {
-  now: "it is kolpak now: name, icon, links. sable's keys are gone. tests pass",
+  now: "e2ee parked: test account verified, proof pending. next: release build numbers",
   steps: [
     { name: "docs",    state: "done" },
     { name: "fork",    state: "now", part: 0.85 },
