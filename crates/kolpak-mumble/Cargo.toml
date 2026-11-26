@@ -37,7 +37,10 @@ tokio-rustls = { version = "0.26", default-features = false, features = ["ring",
 # AAudio directly on Android (src/android_audio.rs), for the voice-call input preset and
 # usage cpal does not expose: that is what turns on the phone's echo cancellation. The same
 # crate cpal uses; api-level-28 adds presets and usages, so the app's minSdk is 28.
-ndk = { version = "0.9", default-features = false, features = ["audio", "api-level-28"], optional = true }
+ndk = { version = "0.9", default-features = false, features = [
+  "audio",
+  "api-level-28",
+], optional = true }
 
 [target.'cfg(windows)'.dependencies]
 # Key state for system-wide push to talk.

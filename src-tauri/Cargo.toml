@@ -225,6 +225,11 @@ devtools = ["dep:tauri-plugin-devtools"]
 matrix-crypto = ["dep:matrix-sdk", "dep:matrix-sdk-crypto", "dep:matrix-sdk-sqlite", "dep:http"]
 # Pulls play-services-location on Android. Off for FOSS-repo builds.
 geolocation = ["dep:tauri-plugin-geolocation"]
+# Kolpak: our copy of Sable's notifications plugin, with the push routing fixed so pop-ups
+# show the decrypted text (crates/tauri-plugin-notifications/KOLPAK.md).
+[patch."https://github.com/SableClient/tauri-plugin-notifications.git"]
+tauri-plugin-notifications = { path = "../crates/tauri-plugin-notifications" }
+
 [patch.crates-io]
 tauri-typegen = { git = "https://github.com/SableClient/tauri-typegen", branch = "fix/nondeterministic-generation-cache" }
 

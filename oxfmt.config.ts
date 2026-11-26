@@ -23,5 +23,7 @@ export default {
     // Kolpak's notes, design sources and the OBS progress widget: not app code, and the
     // mockups are exports from the design canvas that must stay byte for byte.
     'AI',
+    // Kolpak's copy of a third-party plugin: kept as upstream wrote it, so diffs stay small.
+    'crates/tauri-plugin-notifications',
   ],
 } satisfies OxfmtConfig;

@@ -1,0 +1,478 @@
+package app.tauri.notification
+
+import android.app.NotificationChannel
+import android.app.NotificationManager
+import android.app.PendingIntent
+import android.content.Context
+import android.content.Intent
+import android.media.AudioAttributes
+import android.media.RingtoneManager
+import android.os.Build
+import android.os.Bundle
+import java.util.UUID
+import androidx.core.app.NotificationCompat
+import androidx.core.app.NotificationManagerCompat
+import androidx.core.app.Person
+import androidx.core.app.RemoteInput
+import app.tauri.Logger
+import com.fasterxml.jackson.databind.ObjectMapper
+import org.json.JSONObject
+import kotlin.math.abs
+
+object UnifiedPushNotifier {
+    // Kept in sync with the channel ids the app creates in UnifiedPushNotifications.ts.
+    private const val MESSAGES_CHANNEL_ID = "messages.v2"
+    private const val INVITES_CHANNEL_ID = "invites"
+    private const val CALLS_CHANNEL_ID = "calls"
+    private const val ACTION_TYPE_ID = "sable-message"
+    private const val CALL_ACTION_TYPE_ID = "sable-call"
+    private const val GROUP_KEY = "matrix_messages"
+
+    private const val RTC_NOTIFICATION_TYPE = "m.rtc.notification"
+    private const val RTC_NOTIFICATION_TYPE_UNSTABLE = "org.matrix.msc4075.rtc.notification"
+    private const val ANSWER_ACTION = "sable-call-answer"
+    private const val DECLINE_ACTION = "sable-call-decline"
+    private const val DEFAULT_RING_LIFETIME_MS = 30_000L
+    private const val MAX_RING_LIFETIME_MS = 120_000L
+
+    fun showFromPushInBackground(context: Context, rawMessage: String) {
+        val app = context.applicationContext
+        Thread {
+            runCatching { showFromPush(app, rawMessage) }
+                .onFailure { Logger.error(Logger.tags(TAG), "Cold push rendering failed", it as? Exception) }
+        }.start()
+    }
+
+    fun showFromPush(context: Context, rawMessage: String) {
+        val notification = MatrixPushPayload.parse(rawMessage) ?: return
+        val roomId = notification.optString("room_id")
+        if (roomId.isEmpty()) return
+        val userId = notification.optString("user_id")
+        val manager = context.getSystemService(NotificationManager::class.java)
+        val id = if (userId.isNotEmpty()) roomNotificationId(userId, roomId) else fallbackNotificationId(roomId)
+        if (notification.optJSONObject("counts")?.optInt("unread", -1) == 0) {
+            manager.cancel(id)
+            return
+        }
+        val generation = UUID.randomUUID().toString()
+        val encrypted = notification.optString("type") == "m.room.encrypted"
+        if (!encrypted) {
+            if (isRing(notification)) {
+                postIncomingCall(context, notification, notification)
+                return
+            }
+            post(context, notification, null, generation)
+            return
+        }
+        post(context, notification, "Encrypted message", generation)
+
+        val state = UnifiedPushStateStore(context)
+        if (!state.showEncryptedContent) {
+            PushDiagnostics.record(context, PushOutcome.HIDDEN_BY_SETTING)
+            return
+        }
+        if (userId.isEmpty() || userId != state.pushUserId) return
+        val (clear, outcome) = decryptedEvent(context, notification)
+        PushDiagnostics.record(context, outcome)
+        if (clear == null || !state.showEncryptedContent) return
+        if (isRing(clear)) {
+            manager.cancel(id)
+            postIncomingCall(context, notification, clear)
+            return
+        }
+        val body = clear.optJSONObject("content")
+            ?.optString("body")
+            ?.takeIf { it.isNotEmpty() }
+        if (body == null) {
+            PushDiagnostics.record(context, PushOutcome.EMPTY_BODY)
+            return
+        }
+        val stillCurrent = manager.activeNotifications.any {
+            it.id == id && it.tag == null && it.notification.extras.getString(GENERATION_KEY) == generation
+        }
+        if (stillCurrent) post(context, notification, body, generation, silent = true)
+    }
+
+    internal fun isRing(event: JSONObject): Boolean {
+        val type = event.optString("type")
+        if (type != RTC_NOTIFICATION_TYPE && type != RTC_NOTIFICATION_TYPE_UNSTABLE) return false
+        return event.optJSONObject("content")?.optString("notification_type") == "ring"
+    }
+
+    private const val GENERATION_KEY = "sable.push.generation"
+
+    private fun post(
+        context: Context,
+        notification: JSONObject,
+        preview: String?,
+        generation: String,
+        silent: Boolean = false,
+    ) {
+        val roomId = notification.optString("room_id")
+        val eventId = notification.optString("event_id")
+        val sender = notification.optString("sender_display_name")
+        val isInvite = notification.optString("type") == "m.room.member" &&
+            notification.optJSONObject("content")?.optString("membership") == "invite"
+        val roomName = notification.optString("room_name")
+        val title = if (isInvite) {
+            "New Invitation"
+        } else {
+            roomName.ifEmpty { sender.ifEmpty { "New message" } }
+        }
+        val text = if (isInvite) null else preview ?: messageText(context, notification)
+        val body = if (isInvite) buildInviteBody(sender, roomName) else buildBody(sender, text.orEmpty())
+        val channelId = if (isInvite) INVITES_CHANNEL_ID else MESSAGES_CHANNEL_ID
+
+        val userId = notification.optString("user_id")
+
+        ensureChannels(context)
+
+        val iconId = context.resources
+            .getIdentifier("notification_icon", "drawable", context.packageName)
+            .takeIf { it != 0 } ?: android.R.drawable.ic_dialog_info
+
+        // Notification identity must match the warm path so the JS side can
+        // enrich or clear this entry: untagged Android key (null, id) with
+        // id = Math.abs(hashCode(userId + '\u0000' + roomId)). Without a user
+        // id in the payload the warm identity cannot be reproduced; fall
+        // back to the room/event key (stable same-room updates, but no warm
+        // clear/enrich match).
+        val notifId = if (userId.isNotEmpty() && roomId.isNotEmpty()) {
+            roomNotificationId(userId, roomId)
+        } else {
+            Logger.warn(
+                Logger.tags(TAG),
+                "Push payload has no user_id; cold notification will not match warm identity"
+            )
+            fallbackNotificationId(roomId.ifEmpty { eventId })
+        }
+
+        val intent = buildPushIntent(context, notifId, roomId, eventId, userId)
+
+        val flags = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
+            PendingIntent.FLAG_CANCEL_CURRENT or PendingIntent.FLAG_MUTABLE
+        } else {
+            PendingIntent.FLAG_CANCEL_CURRENT
+        }
+
+        val builder = NotificationCompat.Builder(context, channelId)
+            .setSmallIcon(iconId)
+            .addExtras(Bundle().apply { putString(GENERATION_KEY, generation) })
+            .setContentTitle(title)
+            .setContentText(body)
+            .setAutoCancel(true)
+            .setOnlyAlertOnce(silent)
+            .setPriority(NotificationCompat.PRIORITY_HIGH)
+            .setGroup(GROUP_KEY)
+            .setContentIntent(
+                PendingIntent.getActivity(context, notifId, intent, flags)
+            )
+
+        if (silent) builder.setSilent(true)
+
+        // Same style as the warm path, so JS enrichment updates it in place.
+        if (isInvite) {
+            builder.setStyle(NotificationCompat.BigTextStyle().bigText(body))
+        } else {
+            builder.setStyle(
+                NotificationCompat.MessagingStyle(
+                    Person.Builder().setName(SELF_PERSON_NAME).build()
+                ).also { style ->
+                    if (roomName.isNotEmpty()) {
+                        style.conversationTitle = roomName
+                        style.isGroupConversation = true
+                    }
+                }.addMessage(
+                    text.orEmpty(),
+                    System.currentTimeMillis(),
+                    sender.takeIf { it.isNotEmpty() }?.let { Person.Builder().setName(it).build() }
+                )
+            )
+        }
+
+        if (!isInvite) {
+            addReplyAction(context, builder, notifId, roomId, eventId, userId, flags)
+        }
+
+        NotificationManagerCompat.from(context).notify(notifId, builder.build())
+    }
+
+    private fun postIncomingCall(context: Context, notification: JSONObject, event: JSONObject) {
+        ensureChannels(context)
+
+        val roomId = notification.optString("room_id")
+        val userId = notification.optString("user_id")
+        val eventId = event.optString("event_id").ifEmpty { notification.optString("event_id") }
+        val caller = notification.optString("sender_display_name")
+            .ifEmpty { notification.optString("room_name") }
+            .ifEmpty { notification.optString("sender") }
+            .ifEmpty { "Unknown caller" }
+
+        val notifId = callNotificationId(userId, roomId)
+        val flags = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
+            PendingIntent.FLAG_CANCEL_CURRENT or PendingIntent.FLAG_MUTABLE
+        } else {
+            PendingIntent.FLAG_CANCEL_CURRENT
+        }
+        fun pending(action: String) = PendingIntent.getActivity(
+            context,
+            notifId + action.hashCode(),
+            buildPushIntent(context, notifId, roomId, eventId, userId, action, CALL_ACTION_TYPE_ID),
+            flags,
+        )
+
+        val iconId = context.resources
+            .getIdentifier("notification_icon", "drawable", context.packageName)
+            .takeIf { it != 0 } ?: android.R.drawable.ic_dialog_info
+        val fullScreen = pending(DEFAULT_PRESS_ACTION)
+
+        val builder = NotificationCompat.Builder(context, CALLS_CHANNEL_ID)
+            .setSmallIcon(iconId)
+            .setCategory(NotificationCompat.CATEGORY_CALL)
+            .setPriority(NotificationCompat.PRIORITY_MAX)
+            .setVisibility(NotificationCompat.VISIBILITY_PUBLIC)
+            .setOngoing(true)
+            .setAutoCancel(false)
+            .setStyle(
+                NotificationCompat.CallStyle.forIncomingCall(
+                    Person.Builder().setName(caller).setImportant(true).build(),
+                    pending(DECLINE_ACTION),
+                    pending(ANSWER_ACTION),
+                )
+            )
+            .setContentIntent(fullScreen)
+            .setFullScreenIntent(fullScreen, true)
+            .setTimeoutAfter(ringLifetimeMs(event))
+
+        NotificationManagerCompat.from(context).notify(notifId, builder.build())
+    }
+
+    /** Clamped: a broken sender clock must not ring forever. */
+    private fun ringLifetimeMs(event: JSONObject): Long {
+        val lifetime = event.optJSONObject("content")?.optLong("lifetime", 0L) ?: 0L
+        if (lifetime <= 0L) return DEFAULT_RING_LIFETIME_MS
+        return lifetime.coerceAtMost(MAX_RING_LIFETIME_MS)
+    }
+
+    /** Distinct from [roomNotificationId]: a call and a conversation coexist. */
+    internal fun callNotificationId(userId: String, roomId: String): Int =
+        roomNotificationId(userId, roomId + '\u0000' + "call")
+
+    private fun addReplyAction(
+        context: Context,
+        builder: NotificationCompat.Builder,
+        notifId: Int,
+        roomId: String,
+        eventId: String,
+        userId: String,
+        flags: Int
+    ) {
+        val storage = NotificationStorage(context, ObjectMapper())
+        val actions = storage.getActionGroup(ACTION_TYPE_ID)
+        for (action in actions) {
+            if (action == null) continue
+            val actionIntent = buildPushIntent(context, notifId, roomId, eventId, userId, action.id)
+            val actionPendingIntent = PendingIntent.getActivity(
+                context, notifId + action.id.hashCode(), actionIntent, flags
+            )
+            val actionBuilder = NotificationCompat.Action.Builder(
+                R.drawable.ic_transparent, action.title, actionPendingIntent
+            )
+            if (action.input == true) {
+                actionBuilder.addRemoteInput(
+                    RemoteInput.Builder(REMOTE_INPUT_KEY).setLabel(action.title).build()
+                )
+            }
+            builder.addAction(actionBuilder.build())
+        }
+    }
+
+    /**
+     * Stable, nonnegative notification id matching the warm-path (deployed
+     * Sable JS) identity for a room:
+     * `Math.abs(hashCode(userId + '\u0000' + roomId))`. The JS hash is a 32-bit
+     * wrap-around hash over UTF-16 code units, exactly what
+     * [String.hashCode] computes, and JS `Math.abs` corresponds to
+     * [kotlin.math.abs] here. [Int.MIN_VALUE] has no positive counterpart
+     * (the JS result 2^31 cannot cross the bridge as an Int), so it is
+     * mapped safely to 0.
+     */
+    internal fun roomNotificationId(userId: String, roomId: String): Int {
+        val hash = userId + '\u0000' + roomId
+        return hash.hashCode().let { if (it == Int.MIN_VALUE) 0 else abs(it) }
+    }
+
+    /**
+     * Stable, nonnegative id for a room-or-event key. Used only when the
+     * push payload carries no user id; this identity deliberately differs
+     * from the warm-path one.
+     */
+    internal fun fallbackNotificationId(roomOrEventKey: String): Int =
+        roomOrEventKey.hashCode() and Int.MAX_VALUE
+
+    /**
+     * Builds an intent carrying the push payload so that
+     * [NotificationPlugin.onIntent] can extract it via
+     * [TauriNotificationManager.handleNotificationActionPerformed] and
+     * [NotificationPlugin.extractLocalNotificationData].
+     *
+     * Mirrors the structure set by [TauriNotificationManager.buildIntent] in the
+     * warm path (JS-triggered sendNotification).
+     */
+    private fun buildPushIntent(
+        context: Context,
+        notifId: Int,
+        roomId: String,
+        eventId: String,
+        userId: String,
+        action: String = DEFAULT_PRESS_ACTION,
+        actionTypeId: String = ACTION_TYPE_ID
+    ): Intent {
+        val intent = context.packageManager.getLaunchIntentForPackage(context.packageName)
+            ?: Intent(Intent.ACTION_MAIN).setPackage(context.packageName)
+        intent.action = Intent.ACTION_MAIN
+        intent.addCategory(Intent.CATEGORY_LAUNCHER)
+        intent.flags = Intent.FLAG_ACTIVITY_SINGLE_TOP or Intent.FLAG_ACTIVITY_CLEAR_TOP
+        intent.putExtra(NOTIFICATION_INTENT_KEY, notifId)
+        intent.putExtra(ACTION_INTENT_KEY, action)
+        intent.putExtra(NOTIFICATION_IS_REMOVABLE_KEY, true)
+
+        val extraJson = JSONObject().apply {
+            put("room_id", roomId)
+            put("event_id", eventId)
+            if (userId.isNotEmpty()) put("user_id", userId)
+            put("instance", UnifiedPushStateStore.INSTANCE)
+        }
+        val sourceJson = JSONObject().apply {
+            put("id", notifId)
+            put("extra", extraJson)
+            put("actionTypeId", actionTypeId)
+        }.toString()
+        intent.putExtra(NOTIFICATION_OBJ_INTENT_KEY, sourceJson)
+
+        return intent
+    }
+
+    private fun messageText(context: Context, notification: JSONObject): String {
+        if (notification.optString("type") != "m.room.encrypted") {
+            PushDiagnostics.record(context, PushOutcome.PLAINTEXT)
+            return notification.optJSONObject("content")
+                ?.optString("body")
+                ?.takeIf { it.isNotEmpty() }
+                ?: "New message"
+        }
+
+        return "Encrypted message"
+    }
+
+    private fun decryptedEvent(
+        context: Context,
+        notification: JSONObject
+    ): Pair<JSONObject?, PushOutcome> {
+        val state = UnifiedPushStateStore(context)
+        val userId = state.pushUserId ?: return null to PushOutcome.NO_ACCOUNT
+        val deviceId = state.pushDeviceId ?: return null to PushOutcome.NO_ACCOUNT
+        val roomId = notification.optString("room_id").takeIf { it.isNotEmpty() }
+            ?: return null to PushOutcome.NO_CONTENT
+        val content = notification.optJSONObject("content")
+            ?: return null to PushOutcome.NO_CONTENT
+
+        val event = JSONObject()
+            .put("type", "m.room.encrypted")
+            .put("room_id", roomId)
+            .put("content", content)
+            .put("event_id", notification.optString("event_id"))
+            .put("sender", notification.optString("sender"))
+            .put("origin_server_ts", System.currentTimeMillis())
+
+        val clear = when (
+            val result = PushPayloadDecryptor.decrypt(
+                context,
+                userId,
+                deviceId,
+                roomId,
+                event.toString(),
+            )
+        ) {
+            is PushDecryptResult.Success -> result.clearEventJson
+            is PushDecryptResult.Failure -> return null to result.outcome
+        }
+
+        val clearEvent = try {
+            JSONObject(clear)
+        } catch (_: Exception) {
+            null
+        }
+
+        return if (clearEvent == null) {
+            null to PushOutcome.EMPTY_BODY
+        } else {
+            clearEvent to PushOutcome.DECRYPTED
+        }
+    }
+
+    private fun buildBody(sender: String, text: String): String {
+        val prefix = if (sender.isNotEmpty()) "$sender: " else ""
+        return "$prefix$text"
+    }
+
+    private fun buildInviteBody(sender: String, roomName: String): String = when {
+        sender.isNotEmpty() && roomName.isNotEmpty() -> "$sender invites you to $roomName"
+        sender.isNotEmpty() -> "from $sender"
+        roomName.isNotEmpty() -> "to $roomName"
+        else -> ""
+    }
+
+    private fun ensureChannels(context: Context) {
+        if (Build.VERSION.SDK_INT < Build.VERSION_CODES.O) return
+        val manager = context.getSystemService(NotificationManager::class.java) ?: return
+        ensureChannel(
+            manager,
+            MESSAGES_CHANNEL_ID,
+            "Messages",
+            "Matrix message notifications",
+            NotificationManager.IMPORTANCE_HIGH
+        )
+        ensureChannel(
+            manager,
+            INVITES_CHANNEL_ID,
+            "Invitations",
+            "Room and space invitations",
+            NotificationManager.IMPORTANCE_DEFAULT
+        )
+        ensureChannel(
+            manager,
+            CALLS_CHANNEL_ID,
+            "Calls",
+            "Incoming calls",
+            NotificationManager.IMPORTANCE_HIGH
+        ) { channel ->
+            channel.setSound(
+                RingtoneManager.getDefaultUri(RingtoneManager.TYPE_RINGTONE),
+                AudioAttributes.Builder()
+                    .setUsage(AudioAttributes.USAGE_NOTIFICATION_RINGTONE)
+                    .setContentType(AudioAttributes.CONTENT_TYPE_SONIFICATION)
+                    .build(),
+            )
+            channel.enableVibration(true)
+            channel.lockscreenVisibility = NotificationCompat.VISIBILITY_PUBLIC
+        }
+    }
+
+    private fun ensureChannel(
+        manager: NotificationManager,
+        id: String,
+        name: String,
+        channelDescription: String,
+        importance: Int,
+        configure: (NotificationChannel) -> Unit = {}
+    ) {
+        if (manager.getNotificationChannel(id) != null) return
+        manager.createNotificationChannel(
+            NotificationChannel(id, name, importance).apply {
+                description = channelDescription
+                configure(this)
+            }
+        )
+    }
+}

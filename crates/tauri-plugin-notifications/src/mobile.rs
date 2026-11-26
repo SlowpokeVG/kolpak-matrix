@@ -1,0 +1,372 @@
+// Async on every target for a uniform API; some platform branches never await.
+#![allow(clippy::unused_async)]
+
+use serde::de::DeserializeOwned;
+use tauri::{
+    AppHandle, Runtime,
+    plugin::{PermissionState, PluginApi, PluginHandle},
+};
+
+use crate::models::{
+    ActionType, ActiveNotification, Channel, PendingNotification, PermissionResponse,
+    PushDiagnostics, PushNotificationResponse,
+};
+
+use std::collections::HashMap;
+
+#[cfg(target_os = "android")]
+const PLUGIN_IDENTIFIER: &str = "app.tauri.notification";
+
+#[cfg(target_os = "ios")]
+tauri::ios_plugin_binding!(init_plugin_notification);
+
+// initializes the Kotlin or Swift plugin classes
+// `PluginApi` is consumed by the framework's register helpers.
+#[allow(clippy::needless_pass_by_value)]
+pub fn init<R: Runtime, C: DeserializeOwned>(
+    _app: &AppHandle<R>,
+    api: PluginApi<R, C>,
+) -> crate::Result<Notifications<R>> {
+    #[cfg(target_os = "android")]
+    let handle = api.register_android_plugin(PLUGIN_IDENTIFIER, "NotificationPlugin")?;
+    #[cfg(target_os = "ios")]
+    let handle = api.register_ios_plugin(init_plugin_notification)?;
+    Ok(Notifications(handle))
+}
+
+impl<R: Runtime> crate::NotificationsBuilder<R> {
+    pub async fn show(self) -> crate::Result<()> {
+        self.handle
+            .run_mobile_plugin_async::<i32>("show", self.data)
+            .await
+            .map(|_| ())
+            .map_err(Into::into)
+    }
+}
+
+/// Access to the notification APIs.
+///
+/// You can get an instance of this type via [`NotificationExt`](crate::NotificationExt)
+pub struct Notifications<R: Runtime>(PluginHandle<R>);
+
+impl<R: Runtime> Notifications<R> {
+    pub fn builder(&self) -> crate::NotificationsBuilder<R> {
+        crate::NotificationsBuilder::new(self.0.clone())
+    }
+
+    pub async fn request_permission(&self) -> crate::Result<PermissionState> {
+        self.0
+            .run_mobile_plugin_async::<PermissionResponse>("requestPermissions", ())
+            .await
+            .map(|r| r.permission_state)
+            .map_err(Into::into)
+    }
+
+    pub async fn register_for_push_notifications(
+        &self,
+        vapid: Option<String>,
+        provider: Option<String>,
+        embedded_gateway_url: Option<String>,
+        user_id: Option<String>,
+        device_id: Option<String>,
+    ) -> crate::Result<PushNotificationResponse> {
+        #[cfg(feature = "push-notifications")]
+        {
+            #[derive(serde::Serialize)]
+            #[serde(rename_all = "camelCase")]
+            struct RegisterArgs {
+                #[serde(skip_serializing_if = "Option::is_none")]
+                vapid: Option<String>,
+                #[serde(skip_serializing_if = "Option::is_none")]
+                provider: Option<String>,
+                #[serde(skip_serializing_if = "Option::is_none")]
+                embedded_gateway_url: Option<String>,
+                #[serde(skip_serializing_if = "Option::is_none")]
+                user_id: Option<String>,
+                #[serde(skip_serializing_if = "Option::is_none")]
+                device_id: Option<String>,
+            }
+            self.0
+                .run_mobile_plugin_async::<PushNotificationResponse>(
+                    "registerForPushNotifications",
+                    RegisterArgs {
+                        vapid,
+                        provider,
+                        embedded_gateway_url,
+                        user_id,
+                        device_id,
+                    },
+                )
+                .await
+                .map_err(Into::into)
+        }
+        #[cfg(not(feature = "push-notifications"))]
+        {
+            let _ = (vapid, provider, embedded_gateway_url, user_id, device_id);
+            Err(crate::Error::Io(std::io::Error::other(
+                "Push notifications feature is not enabled",
+            )))
+        }
+    }
+
+    pub async fn unregister_for_push_notifications(&self) -> crate::Result<()> {
+        #[cfg(feature = "push-notifications")]
+        {
+            self.0
+                .run_mobile_plugin_async::<()>("unregisterForPushNotifications", ())
+                .await
+                .map_err(Into::into)
+        }
+        #[cfg(not(feature = "push-notifications"))]
+        {
+            Err(crate::Error::Io(std::io::Error::other(
+                "Push notifications feature is not enabled",
+            )))
+        }
+    }
+
+    #[cfg(all(target_os = "android", feature = "push-notifications"))]
+    pub async fn list_distributors(&self) -> crate::Result<Vec<String>> {
+        self.0
+            .run_mobile_plugin_async::<crate::models::DistributorsResponse>("listDistributors", ())
+            .await
+            .map(|r| r.distributors)
+            .map_err(Into::into)
+    }
+
+    #[cfg(all(target_os = "android", feature = "push-notifications"))]
+    pub async fn set_distributor(&self, name: String) -> crate::Result<()> {
+        let mut args = HashMap::new();
+        args.insert("distributor", name);
+        self.0
+            .run_mobile_plugin_async::<()>("setDistributor", args)
+            .await
+            .map_err(Into::into)
+    }
+
+    #[cfg(all(target_os = "android", feature = "push-notifications"))]
+    pub async fn set_token(&self, token: String) -> crate::Result<()> {
+        let mut args = HashMap::new();
+        args.insert("token", token);
+        self.0
+            .run_mobile_plugin_async::<()>("setToken", args)
+            .await
+            .map_err(Into::into)
+    }
+
+    pub async fn permission_state(&self) -> crate::Result<PermissionState> {
+        self.0
+            .run_mobile_plugin_async::<PermissionResponse>("checkPermissions", ())
+            .await
+            .map(|r| r.permission_state)
+            .map_err(Into::into)
+    }
+
+    pub async fn register_action_types(&self, types: Vec<ActionType>) -> crate::Result<()> {
+        let mut args = HashMap::new();
+        args.insert("types", types);
+        self.0
+            .run_mobile_plugin_async::<()>("registerActionTypes", args)
+            .await
+            .map_err(Into::into)
+    }
+
+    pub async fn remove_active(&self, notifications: Vec<i32>) -> crate::Result<()> {
+        let mut args = HashMap::new();
+        args.insert(
+            "notifications",
+            notifications
+                .into_iter()
+                .map(|id| {
+                    let mut notification = HashMap::new();
+                    notification.insert("id", id);
+                    notification
+                })
+                .collect::<Vec<HashMap<&str, i32>>>(),
+        );
+        self.0
+            .run_mobile_plugin_async::<()>("removeActive", args)
+            .await
+            .map_err(Into::into)
+    }
+
+    pub async fn active(&self) -> crate::Result<Vec<ActiveNotification>> {
+        self.0
+            .run_mobile_plugin_async("getActive", ())
+            .await
+            .map_err(Into::into)
+    }
+
+    pub async fn remove_all_active(&self) -> crate::Result<()> {
+        self.0
+            .run_mobile_plugin_async::<()>("removeActive", ())
+            .await
+            .map_err(Into::into)
+    }
+
+    pub async fn pending(&self) -> crate::Result<Vec<PendingNotification>> {
+        self.0
+            .run_mobile_plugin_async("getPending", ())
+            .await
+            .map_err(Into::into)
+    }
+
+    /// Cancel pending notifications.
+    pub async fn cancel(&self, notifications: Vec<i32>) -> crate::Result<()> {
+        let mut args = HashMap::new();
+        args.insert("notifications", notifications);
+        self.0
+            .run_mobile_plugin_async::<()>("cancel", args)
+            .await
+            .map_err(Into::into)
+    }
+
+    /// Cancel all pending notifications.
+    pub async fn cancel_all(&self) -> crate::Result<()> {
+        self.0
+            .run_mobile_plugin_async::<()>("cancelAll", ())
+            .await
+            .map_err(Into::into)
+    }
+
+    #[allow(unused_variables, clippy::needless_pass_by_value)]
+    pub async fn create_channel(&self, channel: Channel) -> crate::Result<()> {
+        #[cfg(target_os = "android")]
+        return self
+            .0
+            .run_mobile_plugin_async::<()>("createChannel", channel)
+            .await
+            .map_err(Into::into);
+        #[cfg(target_os = "ios")]
+        return Err(crate::Error::Io(std::io::Error::other(
+            "Channels are not supported on iOS",
+        )));
+    }
+
+    #[allow(unused_variables, clippy::needless_pass_by_value)]
+    pub async fn delete_channel(&self, id: impl Into<String> + Send) -> crate::Result<()> {
+        #[cfg(target_os = "android")]
+        {
+            let mut args = HashMap::new();
+            args.insert("id", id.into());
+            self.0
+                .run_mobile_plugin_async::<()>("deleteChannel", args)
+                .await
+                .map_err(Into::into)
+        }
+        #[cfg(target_os = "ios")]
+        return Err(crate::Error::Io(std::io::Error::other(
+            "Channels are not supported on iOS",
+        )));
+    }
+
+    pub async fn list_channels(&self) -> crate::Result<Vec<Channel>> {
+        #[cfg(target_os = "android")]
+        return self
+            .0
+            .run_mobile_plugin_async("listChannels", ())
+            .await
+            .map_err(Into::into);
+        #[cfg(target_os = "ios")]
+        return Err(crate::Error::Io(std::io::Error::other(
+            "Channels are not supported on iOS",
+        )));
+    }
+
+    /// Set click listener active state.
+    /// Used internally to track if JS listener is registered.
+    pub async fn set_click_listener_active(&self, active: bool) -> crate::Result<()> {
+        let mut args = HashMap::new();
+        args.insert("active", active);
+        self.0
+            .run_mobile_plugin_async::<()>("setClickListenerActive", args)
+            .await
+            .map_err(Into::into)
+    }
+
+    /// Set action listener active state.
+    /// Used internally to queue action results until JS is ready.
+    pub async fn set_action_listener_active(&self, active: bool) -> crate::Result<()> {
+        let mut args = HashMap::new();
+        args.insert("active", active);
+        self.0
+            .run_mobile_plugin_async::<()>("setActionListenerActive", args)
+            .await
+            .map_err(Into::into)
+    }
+
+    /// Set push-message listener active state.
+    /// Until JS attaches, incoming push messages fall back to a native
+    /// notification instead of being emitted into the void.
+    pub async fn set_push_message_listener_active(&self, active: bool) -> crate::Result<()> {
+        let mut args = HashMap::new();
+        args.insert("active", active);
+        self.0
+            .run_mobile_plugin_async::<()>("setPushMessageListenerActive", args)
+            .await
+            .map_err(Into::into)
+    }
+
+    pub async fn set_encrypted_content_allowed(&self, allowed: bool) -> crate::Result<()> {
+        #[cfg(target_os = "android")]
+        {
+            let mut args = HashMap::new();
+            args.insert("allowed", allowed);
+            self.0
+                .run_mobile_plugin_async::<()>("setEncryptedContentAllowed", args)
+                .await
+                .map_err(Into::into)
+        }
+        #[cfg(not(target_os = "android"))]
+        {
+            let _ = allowed;
+            Ok(())
+        }
+    }
+
+    pub async fn is_ignoring_battery_optimizations(&self) -> crate::Result<bool> {
+        #[cfg(all(target_os = "android", feature = "push-notifications"))]
+        {
+            self.0
+                .run_mobile_plugin_async::<crate::models::BatteryOptimizationResponse>(
+                    "isIgnoringBatteryOptimizations",
+                    (),
+                )
+                .await
+                .map(|r| r.ignoring)
+                .map_err(Into::into)
+        }
+        #[cfg(not(all(target_os = "android", feature = "push-notifications")))]
+        {
+            Ok(true)
+        }
+    }
+
+    pub async fn request_ignore_battery_optimizations(&self) -> crate::Result<()> {
+        #[cfg(all(target_os = "android", feature = "push-notifications"))]
+        {
+            self.0
+                .run_mobile_plugin_async::<()>("requestIgnoreBatteryOptimizations", ())
+                .await
+                .map_err(Into::into)
+        }
+        #[cfg(not(all(target_os = "android", feature = "push-notifications")))]
+        {
+            Ok(())
+        }
+    }
+
+    pub async fn take_push_diagnostics(&self) -> crate::Result<PushDiagnostics> {
+        #[cfg(target_os = "android")]
+        {
+            self.0
+                .run_mobile_plugin_async("takePushDiagnostics", ())
+                .await
+                .map_err(Into::into)
+        }
+        #[cfg(not(target_os = "android"))]
+        {
+            Ok(PushDiagnostics::default())
+        }
+    }
+}

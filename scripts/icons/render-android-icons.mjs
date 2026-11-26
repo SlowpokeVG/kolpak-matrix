@@ -3,16 +3,14 @@
 // AI/logo.svg (the Guy) and src-tauri/icons/kolpak-icon.svg (the Guy on the paper square)
 // into src-tauri/icons/android, which gen/android/app/src/main/res links to.
 //
-// Needs Playwright with a Chromium build (`require('playwright')`). Run from the repo root:
-//   node scripts/icons/render-android-icons.mjs
-// Re-run only when the logo changes; the PNGs are committed.
+// Uses the Playwright the repo already has for its end-to-end tests. Run from the repo root:
+//   pnpm generate:android-icons
+// Set CHROMIUM_PATH to use a Chromium other than Playwright's own. Re-run only when the logo
+// changes; the PNGs are committed.
 
 import { mkdirSync, readFileSync, writeFileSync } from 'node:fs';
-import { createRequire } from 'node:module';
 import path from 'node:path';
-
-const require = createRequire(import.meta.url);
-const { chromium } = require('playwright');
+import { chromium } from '@playwright/test';
 
 const root = process.cwd();
 const out = path.join(root, 'src-tauri', 'icons', 'android');
@@ -36,7 +34,7 @@ function page(svg, size, { fit = 1, silhouette = false, round = false } = {}) {
   </style></head><body><div class="c"><img src="${dataUrl(svg)}"></div></body></html>`;
 }
 
-const browser = await chromium.launch();
+const browser = await chromium.launch({ executablePath: process.env.CHROMIUM_PATH });
 const ctx = await browser.newContext({ deviceScaleFactor: 1 });
 const p = await ctx.newPage();
 

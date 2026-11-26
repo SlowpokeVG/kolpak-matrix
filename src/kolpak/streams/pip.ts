@@ -41,7 +41,7 @@ const startBridge = (): void => {
 
 export function pipSupported(): boolean {
   if (isAndroidTauri()) return true;
-  return typeof document !== 'undefined' && Boolean(document.pictureInPictureEnabled);
+  return typeof document !== 'undefined' && document.pictureInPictureEnabled;
 }
 
 /** Open the playing stream in picture in picture. Does nothing when nothing plays. */
