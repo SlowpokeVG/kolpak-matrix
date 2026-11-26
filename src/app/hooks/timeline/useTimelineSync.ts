@@ -272,7 +272,11 @@ const useTimelinePagination = (
 
           const rebuiltTimelines = getLinkedTimelines(firstTimeline);
           const fetched = getTimelinesEventsCount(rebuiltTimelines) - countBefore;
-          if (fetched <= 0) return;
+          // Kolpak: a page can add nothing and still have more behind it: the SDK keeps edits
+          // of a message it has not loaded yet out of the timeline, and a bot that edits its
+          // message hundreds of times fills whole pages with them. Keep going (within the
+          // same budget) instead of stopping with an empty screen.
+          if (fetched <= 0 && !hasMore) return;
 
           const visibleFetched = isEventVisible
             ? countVisibleAmongNewest(rebuiltTimelines, fetched, backwards, isEventVisible)

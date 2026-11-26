@@ -898,13 +898,23 @@ export function RoomTimeline({
   }, [eventId, focusLiveTimeline, setAtBottom]);
 
   useEffect(() => {
-    if (unreadResolvedRef.current) return;
+    // Kolpak: while the read boundary is not in the live timeline, ask again as the timeline
+    // fills in: the unread messages may all turn out to be right here (liveReadBoundary in
+    // $utils/room/unread). Only ever settles it, never brings the jump back.
+    const unsettled = unreadInfo !== undefined && !unreadInfo.inLiveTimeline;
+    if (unreadResolvedRef.current && !unsettled) return;
     const resolved = getRoomUnreadInfo(room, !isReady);
+    if (unreadResolvedRef.current) {
+      if (resolved && !resolved.inLiveTimeline) return;
+      readUptoEventIdRef.current = resolved?.readUptoEventId;
+      setUnreadInfo(resolved);
+      return;
+    }
     if (!resolved) return;
     unreadResolvedRef.current = true;
     readUptoEventIdRef.current = resolved.readUptoEventId;
     setUnreadInfo(resolved);
-  }, [room, isReady, timelineSync.eventsLength]);
+  }, [room, isReady, timelineSync.eventsLength, unreadInfo]);
 
   useEffect(() => {
     if (eventId) return;

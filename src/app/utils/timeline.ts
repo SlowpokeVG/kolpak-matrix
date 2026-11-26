@@ -1,6 +1,11 @@
 import type { EventTimeline, MatrixEvent, Room } from '$types/matrix-sdk';
 import { Direction } from '$types/matrix-sdk';
-import { getFullyReadEventId, roomHaveNotification, roomHaveUnread } from '$utils/room/unread';
+import {
+  getFullyReadEventId,
+  liveReadBoundary,
+  roomHaveNotification,
+  roomHaveUnread,
+} from '$utils/room/unread';
 
 export const PAGINATION_LIMIT = 60;
 
@@ -105,8 +110,16 @@ export const getRoomUnreadInfo = (room: Room, scrollTo = false) => {
   if (!readUptoEventId) return undefined;
 
   const evtTimeline = getEventTimeline(room, readUptoEventId);
+  const inLiveTimeline =
+    !!evtTimeline &&
+    getFirstLinkedTimeline(evtTimeline, Direction.Forward) === room.getLiveTimeline();
 
-  if (!evtTimeline) {
+  if (!inLiveTimeline) {
+    // Kolpak: the boundary is not loaded; place it in the live timeline if all the unread
+    // messages are there anyway (liveReadBoundary).
+    const live = liveReadBoundary(room);
+    if (live === null) return undefined;
+    if (live) return { readUptoEventId: live, inLiveTimeline: true, scrollTo };
     return {
       readUptoEventId,
       inLiveTimeline: false,
@@ -114,9 +127,7 @@ export const getRoomUnreadInfo = (room: Room, scrollTo = false) => {
     };
   }
 
-  const latestTimeline = getFirstLinkedTimeline(evtTimeline, Direction.Forward);
-  const inLiveTimeline = latestTimeline === room.getLiveTimeline();
-  if (inLiveTimeline && !roomHaveNotification(room) && !roomHaveUnread(room.client, room)) {
+  if (!roomHaveNotification(room) && !roomHaveUnread(room.client, room)) {
     return undefined;
   }
 

@@ -515,6 +515,23 @@ What still shows "Encrypted message": a message in a Megolm session that reached
 
 Checks: Rust test above, `cargo check` for aarch64-linux-android clean, the plugin's 206 Robolectric tests pass (`UnifiedPushNotifierTest` and `EmbeddedPushServiceTest` updated for the new order), `tsc`, `oxlint` (also fixed a leftover `console.log` in `scripts/icons/render-android-icons.mjs`), `oxfmt`, and vitest for the notification code (new `pushKeyMirror.test.ts`).
 
+### 2026-11-26 — "Jump to Unread" in rooms where the bot edits its message all day
+
+The owner: "Jump to Unread" throws you to an odd place and is slow. Reproduced against a local Synapse (`pip install matrix-synapse`, a seeding script, the web build driven by Playwright at phone size): a bot posts "Mumble activity" and edits it hundreds of times, then posts one new message.
+
+What happened, step by step:
+- The app's first sync loads one event per room, so the read receipt (before the edits) is not loaded and `getRoomUnreadInfo` (`src/app/utils/timeline.ts`) showed "Jump to Unread" + "Mark as Read" whenever the boundary is not in the live timeline, without asking whether anything is unread. It was decided once at mount and never again.
+- With the boundary not in the live timeline, `tryAutoMarkAsRead` never marks the room read, so the chips stayed even at the bottom.
+- The jump goes to the receipt (in the past, before all the edits) through `/context`, and getting back down pages forward through the hidden edits.
+- Opening the room showed a nearly empty screen: matrix-js-sdk keeps edits of a message it has not loaded out of the timeline ("unknown relations"), so a page of 60 edits adds nothing, and pagination stopped after each such page (`fetched <= 0`).
+
+Fixes:
+- `liveReadBoundary` (`src/app/utils/room/unread.ts`): when the receipt is not loaded, and the account's rules notify for every message (default `.m.rule.message`/`.m.rule.encrypted`, or the room set to all messages), compare the server's main-timeline notification count with the unread events in the loaded live timeline that the server counts (messages and encrypted events from others; not notices, not edits). If all of them are loaded and there are at most 10, the boundary goes just before the first unread message (or nowhere, when nothing is unread or the first unread is the oldest loaded): no chips, and the room marks itself read at the bottom. With more unread messages the jump stays as it was and lands on the divider.
+- `RoomTimeline` asks again as the timeline fills in while the boundary is not in the live timeline, and only ever settles it.
+- `useTimelineSync` pagination keeps going through pages that added nothing while there is more (same budget of 1 + 3 pages per call, 5 viewport fills).
+
+Checked in the browser: notice after 400 edits, one text after 400 edits, three texts after 400 edits: no chips, read receipt sent, history visible above. 150 real unread messages behind 300 edits: the chip stays and jumps exactly to the "New messages" divider. Unit tests: `src/app/utils/room/liveReadBoundary.test.ts`. Also fixed `edgeToEdgeInsets.test.ts`, which still looked for `MainActivity.kt` under `moe/sable/client` after the Android rebrand. `mediaCache.test.ts` and `mediaTransport.test.ts` fail in this container before and after these changes (a `Blob` from jsdom vs Node's; the container has Node 22, the project asks for 24).
+
 ## Starting a new Claude session on this
 
 Open the session in a local clone of this repo and say something like:

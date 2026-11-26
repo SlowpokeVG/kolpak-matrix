@@ -2,6 +2,7 @@ import type { IPushRule, IPushRules, MatrixClient, MatrixEvent, Room } from '$ty
 import {
   Direction,
   EventType,
+  MsgType,
   NotificationCountType,
   PushRuleActionName,
   ReceiptType,
@@ -151,6 +152,84 @@ export const roomHaveUnread = (mx: MatrixClient, room: Room) => {
     }
   }
   return false;
+};
+
+/**
+ * Whether the server counts this event in the room's notification count under the default
+ * push rules: messages and encrypted events from others, but not notices (bots,
+ * `.m.rule.suppress_notices`) or edits (`.m.rule.suppress_edits`, whose relation is readable
+ * even in encrypted rooms).
+ */
+const countedByServer = (event: MatrixEvent, userId: string): boolean => {
+  if (event.getSender() === userId) return false;
+  if (event.getRelation()?.rel_type === RelationType.Replace) return false;
+  if (event.getWireType() === EventType.RoomMessageEncrypted) return true;
+  return event.getType() === EventType.RoomMessage && event.getContent().msgtype !== MsgType.Notice;
+};
+
+/** Up to this many unread messages are near the bottom anyway; no need to jump to them. */
+const MAX_UNREAD_FOR_LIVE_BOUNDARY = 10;
+
+/** The account's default rules notify for every message (not "mentions only"). */
+const notifiesEveryMessage = (mx: MatrixClient): boolean => {
+  const underride = mx.getAccountData(EventType.PushRules)?.getContent<IPushRules>()
+    ?.global?.underride;
+  const notifies = (ruleId: string): boolean => {
+    const rule = underride?.find((candidate) => candidate.rule_id === ruleId);
+    return !!rule && rule.enabled && hasNotifyPushAction(rule.actions);
+  };
+  return notifies('.m.rule.message') && notifies('.m.rule.encrypted');
+};
+
+/**
+ * Kolpak: where the read boundary belongs in the loaded live timeline when the real one is
+ * not loaded. A bot that edits its message hundreds of times pushes the receipt out of the
+ * loaded window, while the few real unread messages sit right at the bottom; without this
+ * the room showed "Jump to Unread" into the past, behind hundreds of hidden edits, and never
+ * marked itself read.
+ *
+ * Trusts the server's notification count, so only where every message notifies (the default
+ * and "all messages" rules): when the loaded window holds as many unread events the server
+ * counts as the server says there are, every one of them is loaded. Only for a few unread
+ * messages: with more, jumping to where reading stopped is still the better way in. Returns
+ * the id of the event just before the first unread message, `null` when nothing the server
+ * counts is unread, or `undefined` otherwise (the caller then keeps the real boundary). The
+ * app syncs one event per room at first, so the answer can change once the room's timeline
+ * fills in; RoomTimeline asks again then.
+ */
+export const liveReadBoundary = (room: Room): string | null | undefined => {
+  const mx = room.client;
+  const userId = mx.getUserId();
+  if (!userId) return undefined;
+  const type = getNotificationType(mx, room.roomId);
+  if (
+    type === NotificationType.Default
+      ? !notifiesEveryMessage(mx)
+      : type !== NotificationType.AllMessages
+  )
+    return undefined;
+
+  // The main timeline only: thread replies are counted per thread and never load here.
+  const total = room.getRoomUnreadNotificationCount(NotificationCountType.Total);
+  // More than fit on a screen: keep the jump to where reading stopped.
+  if (total > MAX_UNREAD_FOR_LIVE_BOUNDARY) return undefined;
+  const events = room.getLiveTimeline().getEvents();
+  let counted = 0;
+  let firstUnread = -1;
+  for (let i = events.length - 1; i >= 0; i -= 1) {
+    const event = events[i];
+    if (!event) continue;
+    // Everything before my own message is read.
+    if (event.getSender() === userId) break;
+    if (countedByServer(event, userId)) counted += 1;
+    if (isNotificationEvent(event, room, userId)) firstUnread = i;
+  }
+  if (counted < total) return undefined;
+  if (total === 0) return null;
+  // The first unread message is the oldest one loaded (the app syncs one event per room at
+  // first, and edits of an older message stay out of the timeline): nothing to put the
+  // divider after, but every unread message is on screen, so there is nothing to jump to.
+  return events[firstUnread - 1]?.getId() ?? null;
 };
 
 type UnreadInfoOptions = {
