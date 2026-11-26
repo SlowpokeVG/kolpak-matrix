@@ -57,6 +57,8 @@ import {
   roomNotificationModeIcon,
 } from '$hooks/useRoomsNotificationPreferences';
 import { RoomNotificationModeSwitcher } from '$components/RoomNotificationSwitcher';
+import { useSimpleMode } from '../../../kolpak/simple/simpleMode';
+import { SimpleRoomText } from '../../../kolpak/simple/SimpleRoomText';
 
 import { InviteUserPrompt } from '$components/invite-user-prompt';
 import { DirectInvitePrompt } from '$components/direct-invite-prompt';
@@ -318,6 +320,8 @@ export function RoomNavItem({
   isStrict,
   joinCallOnSingleClick,
 }: RoomNavItemProps) {
+  // Kolpak: simple mode shows every room's avatar and a messenger-style second line.
+  const simple = useSimpleMode().enabled;
   const mx = useMatrixClient();
   const useAuthentication = useMediaAuthentication();
   const [hover, setHover] = useState(false);
@@ -529,11 +533,11 @@ export function RoomNavItem({
                       style={hideTextStyling(hideText)}
                     >
                       <Avatar
-                        size={hideText ? undefined : '200'}
+                        size={hideText ? undefined : simple ? '400' : '200'}
                         radii="400"
                         style={hideTextStyling(hideText)}
                       >
-                        {showAvatar || (avatarSrc && isStrict) ? (
+                        {showAvatar || simple || (avatarSrc && isStrict) ? (
                           <RoomAvatar
                             roomId={room.roomId}
                             src={avatarSrc}
@@ -572,29 +576,38 @@ export function RoomNavItem({
 
                     {!hideText && (
                       <>
-                        <Box as="span" grow="Yes" direction="Column">
-                          <Text
-                            priority={unread || hasRoomUnread || isActiveCall ? '500' : '400'}
-                            as="span"
-                            size="Inherit"
-                            truncate
-                          >
-                            {roomName}
-                          </Text>
-                          {roomTopic && (
+                        {simple ? (
+                          <SimpleRoomText
+                            room={room}
+                            name={roomName}
+                            direct={direct}
+                            strong={!!unread || hasRoomUnread}
+                          />
+                        ) : (
+                          <Box as="span" grow="Yes" direction="Column">
                             <Text
+                              priority={unread || hasRoomUnread || isActiveCall ? '500' : '400'}
+                              as="span"
+                              size="Inherit"
                               truncate
-                              size="T200"
-                              priority="300"
-                              style={{
-                                opacity: config.opacity.P300,
-                                marginTop: '-2px',
-                              }}
                             >
-                              {roomTopic}
+                              {roomName}
                             </Text>
-                          )}
-                        </Box>
+                            {roomTopic && (
+                              <Text
+                                truncate
+                                size="T200"
+                                priority="300"
+                                style={{
+                                  opacity: config.opacity.P300,
+                                  marginTop: '-2px',
+                                }}
+                              >
+                                {roomTopic}
+                              </Text>
+                            )}
+                          </Box>
+                        )}
                         {!optionsVisible && !unread && !selected && typingMember.length > 0 && (
                           <Badge size="300" variant="Secondary" fill="Soft" radii="Pill" outlined>
                             <TypingIndicator size="300" disableAnimation />

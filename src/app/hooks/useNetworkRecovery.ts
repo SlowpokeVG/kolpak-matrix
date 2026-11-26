@@ -39,19 +39,6 @@ export const useNetworkRecovery = (mx: MatrixClient | undefined): void => {
     [mx]
   );
 
-  useSyncState(
-    mx,
-    useCallback(
-      (current) => {
-        syncStateRef.current = current;
-        lastSyncAtRef.current = Date.now();
-        deadNudgesRef.current = 0;
-        cancelVerify();
-      },
-      [cancelVerify]
-    )
-  );
-
   // Foreground nudges (resume / visible-stale / online) get one sync verification:
   // if no Sync arrives within VERIFY_AFTER_NUDGE_MS, retry once past the throttle.
   const nudgeForeground = useCallback(
@@ -69,6 +56,30 @@ export const useNetworkRecovery = (mx: MatrixClient | undefined): void => {
       }, VERIFY_AFTER_NUDGE_MS);
     },
     [mx, nudge, cancelVerify]
+  );
+
+  useSyncState(
+    mx,
+    useCallback(
+      (current, previous) => {
+        syncStateRef.current = current;
+        lastSyncAtRef.current = Date.now();
+        deadNudgesRef.current = 0;
+        cancelVerify();
+        // Kolpak: a sync that fails while the app is on screen (typically the poll that died
+        // in the background, failing right after resume) would otherwise wait out the SDK's
+        // 2-7 s keepalive delay, plus 5-10 s more if that first check is too early, which
+        // outlasts the banner's grace. The visibility nudge cannot cover it: it fires before
+        // the failure, when retryImmediately() has nothing to retry. Retry on entering the
+        // degraded state instead, once per transition.
+        const degraded = (state: SyncState | null | undefined) =>
+          state === SyncState.Reconnecting || state === SyncState.Error;
+        if (degraded(current) && !degraded(previous) && document.visibilityState === 'visible') {
+          nudgeForeground('retry');
+        }
+      },
+      [cancelVerify, nudgeForeground]
+    )
   );
 
   useEffect(() => {

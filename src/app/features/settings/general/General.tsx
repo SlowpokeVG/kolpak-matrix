@@ -69,6 +69,8 @@ import { downloadJsonFile, saveFileToDevice } from '$utils/download';
 import { useClientConfig } from '$hooks/useClientConfig';
 import { getGifProvider, getGifProviderOptions } from '$utils/gifProviders';
 import { CallSoundSettings } from './CallSoundSettings';
+import { SimpleModeSettings } from '../../../../kolpak/simple/SimpleModeSettings';
+import { useSimpleMode } from '../../../../kolpak/simple/simpleMode';
 
 type DateHintProps = {
   hasChanges: boolean;
@@ -1577,20 +1579,23 @@ function DiagnosticsAndPrivacy() {
 }
 
 export function General({ requestBack, requestClose }: Readonly<GeneralProps>) {
+  // Kolpak: the simple-mode card first; simple mode hides the sections it has no use for.
+  const simple = useSimpleMode().enabled;
   return (
     <SettingsSectionPage title="General" requestBack={requestBack} requestClose={requestClose}>
       <Box grow="Yes">
         <Scroll hideTrack visibility="Hover">
           <PageContent>
             <Box direction="Column" gap="700">
+              <SimpleModeSettings />
               <DateAndTime />
               <Gestures isMobile={isMobileOrTablet()} />
               <Editor />
               <Messages />
               <Embeds />
-              <Calls />
-              <Sync />
-              <DiagnosticsAndPrivacy />
+              {!simple && <Calls />}
+              {!simple && <Sync />}
+              {!simple && <DiagnosticsAndPrivacy />}
             </Box>
           </PageContent>
         </Scroll>

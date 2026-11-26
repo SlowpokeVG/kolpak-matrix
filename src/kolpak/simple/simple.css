@@ -1,0 +1,102 @@
+/*
+ * Simple mode (simpleMode.ts): the Kolpak colours with a messenger's reading comfort. The
+ * system's own sans-serif (Roboto on Android, Segoe UI on Windows) for text and titles,
+ * code stays monospaced; room rows with avatars, the last message and its time.
+ * Unlayered like kolpak-theme.css, whose rules these override; <html> carries the class.
+ */
+
+html.kolpak-simple body.kolpak-theme {
+  --kolpak-font-body:
+    system-ui, -apple-system, 'Segoe UI', Roboto, 'Noto Sans', Ubuntu, 'Helvetica Neue', Arial,
+    sans-serif, var(--font-emoji);
+  --font-monospace: 'JetBrains Mono Variable', ui-monospace, monospace;
+}
+
+/* Titles, labels and buttons: the same face as the text, no capitals. */
+html.kolpak-simple
+  .kolpak-theme
+  :is(
+    ._1xny9xl2,
+    ._1xny9xl3,
+    ._1xny9xl4,
+    ._1xny9xl5,
+    ._1xny9xl6,
+    ._1xny9xl7,
+    ._1xny9xl8,
+    ._1xny9xld,
+    ._1xny9xle,
+    ._1xny9xlf,
+    ._1xny9xlg
+  ) {
+  font-family: var(--kolpak-font-body);
+  font-weight: 600;
+  text-transform: none;
+  letter-spacing: normal;
+}
+
+/* Room rows: 64px, avatar, two lines. */
+html.kolpak-simple .kolpak-theme .kolpak-nav-item:not([data-collapsed]) {
+  min-height: 64px;
+  height: auto;
+}
+html.kolpak-simple
+  .kolpak-theme
+  .kolpak-nav-item[data-kolpak-row='room']:not([data-collapsed])
+  .kolpak-nav-avatar {
+  display: inline-flex;
+}
+
+.kolpak-simple-row {
+  flex: 1 1 auto;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  line-height: 1.25;
+}
+
+.kolpak-simple-row__top {
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+  min-width: 0;
+}
+
+.kolpak-simple-row__name,
+.kolpak-simple-row__line {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+html.kolpak-simple .kolpak-theme .kolpak-nav-item[data-kolpak-row] .kolpak-simple-row__name {
+  flex: 1 1 auto;
+  font-size: 15px;
+  font-weight: 500;
+}
+html.kolpak-simple
+  .kolpak-theme
+  .kolpak-nav-item[data-kolpak-row]
+  .kolpak-simple-row[data-strong='true']
+  .kolpak-simple-row__name {
+  font-weight: 700;
+}
+
+.kolpak-simple-row__time {
+  flex: none;
+  font-size: 12px;
+  color: var(--kolpak-muted, inherit);
+  font-variant-numeric: tabular-nums;
+}
+
+.kolpak-simple-row__line {
+  font-size: 14px;
+  color: var(--kolpak-muted, inherit);
+}
+
+/* The selected row is a paper block; keep its second line readable on it. */
+html.kolpak-simple .kolpak-theme .kolpak-nav-item[aria-selected='true'] .kolpak-simple-row__line,
+html.kolpak-simple .kolpak-theme .kolpak-nav-item[aria-selected='true'] .kolpak-simple-row__time {
+  color: var(--kolpak-dim, inherit);
+}

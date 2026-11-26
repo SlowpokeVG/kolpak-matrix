@@ -9,7 +9,9 @@ import { Theater } from '../../../kolpak/theater/Theater';
 import { useTheater } from '../../../kolpak/theater/theaterStore';
 import { ClientStatusBar } from '../../../kolpak/layout/ClientStatusBar';
 import { LiveSheet, MobileLiveBar } from '../../../kolpak/mobile/MobileLive';
-import { isMobileTauri } from '$utils/platform';
+import { SimpleMainRoom } from '../../../kolpak/simple/SimpleMainRoom';
+import { PipStage } from '../../../kolpak/streams/PipStage';
+import { isAndroidTauri, isMobileTauri } from '$utils/platform';
 
 type ClientLayoutProps = {
   nav: ReactNode;
@@ -50,6 +52,8 @@ export function ClientLayout({ nav, children }: ClientLayoutProps) {
       {mobileLive && <MobileLiveBar hidden={fullPageSettings} />}
       {mobileLive && <LiveSheet />}
       {mobileLive && theaterOpen && <Theater stacked />}
+      <SimpleMainRoom />
+      {isAndroidTauri() && <PipStage />}
     </Box>
   );
 }

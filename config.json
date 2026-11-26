@@ -29,7 +29,9 @@
     "themeId": "kolpak-theme",
     "darkThemeId": "kolpak-theme",
     "showUnreadCounts": true,
-    "hour24Clock": true
+    "hour24Clock": true,
+    "showMessageContentInNotifications": true,
+    "showMessageContentInEncryptedNotifications": true
   },
 
   "hashRouter": {

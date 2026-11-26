@@ -67,6 +67,7 @@ import { useClientConfig } from '$hooks/useClientConfig';
 import { getMxIdServer } from '$utils/mxIdHelper';
 import { NavMenu } from '$components/nav/NavMenu';
 import { useMenuAnchor } from '$hooks/useMenuAnchor';
+import { useSimpleMode } from '../../../../kolpak/simple/simpleMode';
 
 type HomeMenuProps = {
   requestClose: () => void;
@@ -199,7 +200,10 @@ export function Home() {
   const [closedCategories, setClosedCategories] = useAtom(useClosedNavCategoriesAtom());
 
   const defaultCategoryClosed = closedCategories.has(DEFAULT_CATEGORY_ID);
-  const sortRoomsByActivity = defaultCategoryClosed || isShowingAllRoomsInHome;
+  // Kolpak: simple mode lists rooms like a messenger, latest activity first, and drops the
+  // room-management actions above the list.
+  const simple = useSimpleMode().enabled;
+  const sortRoomsByActivity = defaultCategoryClosed || isShowingAllRoomsInHome || simple;
   const orderedRooms = useMemo(
     () =>
       Array.from(rooms).toSorted(
@@ -267,128 +271,148 @@ export function Home() {
       ) : (
         <PageNavContent scrollRef={scrollRef}>
           <Box direction="Column" gap="300">
-            <NavCategory>
-              <NavItem variant="Background" radii="400" aria-selected={createRoomSelected}>
-                <NavButton onClick={() => openShallowRoute(getCreateRoomPath())}>
-                  <NavItemContent>
-                    <Box as="span" grow="Yes" alignItems="Center" justifyContent="Start" gap="200">
-                      <Avatar
-                        size={hideText ? undefined : '200'}
-                        radii="400"
-                        style={hideText ? { width: '100%', padding: '0' } : undefined}
+            {!simple && (
+              <NavCategory>
+                <NavItem variant="Background" radii="400" aria-selected={createRoomSelected}>
+                  <NavButton onClick={() => openShallowRoute(getCreateRoomPath())}>
+                    <NavItemContent>
+                      <Box
+                        as="span"
+                        grow="Yes"
+                        alignItems="Center"
+                        justifyContent="Start"
+                        gap="200"
                       >
-                        {menuIcon(Plus)}
-                      </Avatar>
-                      {!hideText && (
-                        <Box as="span" grow="Yes">
-                          <Text as="span" size="Inherit" truncate>
-                            Create Room
-                          </Text>
-                        </Box>
-                      )}
-                    </Box>
-                  </NavItemContent>
-                </NavButton>
-              </NavItem>
-              <UseStateProvider initial={false}>
-                {(open, setOpen) => (
-                  <>
-                    <NavItem variant="Background" radii="400">
-                      <NavButton onClick={() => setOpen(true)}>
-                        <NavItemContent>
-                          <Box
-                            as="span"
-                            grow="Yes"
-                            alignItems="Center"
-                            justifyContent="Start"
-                            gap="200"
-                          >
-                            <Avatar
-                              size={hideText ? undefined : '200'}
-                              radii="400"
-                              style={hideText ? { width: '100%', padding: '0' } : undefined}
-                            >
-                              {menuIcon(Link)}
-                            </Avatar>
-                            {!hideText && (
-                              <Box as="span" grow="Yes">
-                                <Text as="span" size="Inherit" truncate>
-                                  Join with Address
-                                </Text>
-                              </Box>
-                            )}
+                        <Avatar
+                          size={hideText ? undefined : '200'}
+                          radii="400"
+                          style={hideText ? { width: '100%', padding: '0' } : undefined}
+                        >
+                          {menuIcon(Plus)}
+                        </Avatar>
+                        {!hideText && (
+                          <Box as="span" grow="Yes">
+                            <Text as="span" size="Inherit" truncate>
+                              Create Room
+                            </Text>
                           </Box>
-                        </NavItemContent>
-                      </NavButton>
-                    </NavItem>
-                    {open && (
-                      <JoinAddressPrompt
-                        onCancel={() => setOpen(false)}
-                        onOpen={(roomIdOrAlias, viaServers, eventId) => {
-                          setOpen(false);
-                          const path = getHomeRoomPath(roomIdOrAlias, eventId);
-                          navigate(
-                            viaServers
-                              ? withSearchParam(path, {
-                                  viaServers: encodeSearchParamValueArray(viaServers),
-                                })
-                              : path
-                          );
-                        }}
-                      />
-                    )}
-                  </>
-                )}
-              </UseStateProvider>
-              <NavItem variant="Background" radii="400">
-                <NavButton onClick={handleExploreClick}>
-                  <NavItemContent>
-                    <Box as="span" grow="Yes" alignItems="Center" justifyContent="Start" gap="200">
-                      <Avatar
-                        size={hideText ? undefined : '200'}
-                        radii="400"
-                        style={hideText ? { width: '100%' } : undefined}
-                      >
-                        {menuIcon(UsersThree, {
-                          weight: 'regular',
-                        })}
-                      </Avatar>
-                      {!hideText && (
-                        <Box as="span" grow="Yes">
-                          <Text as="span" size="Inherit" truncate>
-                            Explore Spaces
-                          </Text>
-                        </Box>
+                        )}
+                      </Box>
+                    </NavItemContent>
+                  </NavButton>
+                </NavItem>
+                <UseStateProvider initial={false}>
+                  {(open, setOpen) => (
+                    <>
+                      <NavItem variant="Background" radii="400">
+                        <NavButton onClick={() => setOpen(true)}>
+                          <NavItemContent>
+                            <Box
+                              as="span"
+                              grow="Yes"
+                              alignItems="Center"
+                              justifyContent="Start"
+                              gap="200"
+                            >
+                              <Avatar
+                                size={hideText ? undefined : '200'}
+                                radii="400"
+                                style={hideText ? { width: '100%', padding: '0' } : undefined}
+                              >
+                                {menuIcon(Link)}
+                              </Avatar>
+                              {!hideText && (
+                                <Box as="span" grow="Yes">
+                                  <Text as="span" size="Inherit" truncate>
+                                    Join with Address
+                                  </Text>
+                                </Box>
+                              )}
+                            </Box>
+                          </NavItemContent>
+                        </NavButton>
+                      </NavItem>
+                      {open && (
+                        <JoinAddressPrompt
+                          onCancel={() => setOpen(false)}
+                          onOpen={(roomIdOrAlias, viaServers, eventId) => {
+                            setOpen(false);
+                            const path = getHomeRoomPath(roomIdOrAlias, eventId);
+                            navigate(
+                              viaServers
+                                ? withSearchParam(path, {
+                                    viaServers: encodeSearchParamValueArray(viaServers),
+                                  })
+                                : path
+                            );
+                          }}
+                        />
                       )}
-                    </Box>
-                  </NavItemContent>
-                </NavButton>
-              </NavItem>
-              <NavItem variant="Background" radii="400" aria-selected={searchSelected}>
-                <NavLink to={getHomeSearchPath()}>
-                  <NavItemContent>
-                    <Box as="span" grow="Yes" alignItems="Center" justifyContent="Start" gap="200">
-                      <Avatar
-                        size={hideText ? undefined : '200'}
-                        radii="400"
-                        style={hideText ? { width: '100%' } : undefined}
+                    </>
+                  )}
+                </UseStateProvider>
+                <NavItem variant="Background" radii="400">
+                  <NavButton onClick={handleExploreClick}>
+                    <NavItemContent>
+                      <Box
+                        as="span"
+                        grow="Yes"
+                        alignItems="Center"
+                        justifyContent="Start"
+                        gap="200"
                       >
-                        {menuIcon(MagnifyingGlass, {
-                          weight: searchSelected ? 'fill' : 'regular',
-                        })}
-                      </Avatar>
-                      {!hideText && (
-                        <Box as="span" grow="Yes">
-                          <Text as="span" size="Inherit" truncate>
-                            Message Search
-                          </Text>
-                        </Box>
-                      )}
-                    </Box>
-                  </NavItemContent>
-                </NavLink>
-              </NavItem>
-            </NavCategory>
+                        <Avatar
+                          size={hideText ? undefined : '200'}
+                          radii="400"
+                          style={hideText ? { width: '100%' } : undefined}
+                        >
+                          {menuIcon(UsersThree, {
+                            weight: 'regular',
+                          })}
+                        </Avatar>
+                        {!hideText && (
+                          <Box as="span" grow="Yes">
+                            <Text as="span" size="Inherit" truncate>
+                              Explore Spaces
+                            </Text>
+                          </Box>
+                        )}
+                      </Box>
+                    </NavItemContent>
+                  </NavButton>
+                </NavItem>
+                <NavItem variant="Background" radii="400" aria-selected={searchSelected}>
+                  <NavLink to={getHomeSearchPath()}>
+                    <NavItemContent>
+                      <Box
+                        as="span"
+                        grow="Yes"
+                        alignItems="Center"
+                        justifyContent="Start"
+                        gap="200"
+                      >
+                        <Avatar
+                          size={hideText ? undefined : '200'}
+                          radii="400"
+                          style={hideText ? { width: '100%' } : undefined}
+                        >
+                          {menuIcon(MagnifyingGlass, {
+                            weight: searchSelected ? 'fill' : 'regular',
+                          })}
+                        </Avatar>
+                        {!hideText && (
+                          <Box as="span" grow="Yes">
+                            <Text as="span" size="Inherit" truncate>
+                              Message Search
+                            </Text>
+                          </Box>
+                        )}
+                      </Box>
+                    </NavItemContent>
+                  </NavLink>
+                </NavItem>
+              </NavCategory>
+            )}
             <NavCategory>
               <NavCategoryHeader>
                 <RoomNavCategoryButton

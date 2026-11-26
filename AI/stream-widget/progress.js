@@ -3,7 +3,7 @@
 //   state: "done" | "now" | "todo"
 //   part:  0..1, how far the "now" step is (optional)
 window.KOLPAK_PROGRESS = {
-  now: "Android runs on a phone; bot join links go through Kolpak voice",
+  now: "Simple mode, stream picture in picture, quicker reconnect after resume",
   steps: [
     { name: "docs",    state: "done" },
     { name: "fork",    state: "now", part: 0.85 },

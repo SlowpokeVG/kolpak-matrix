@@ -4,6 +4,7 @@ import { useMatrixClient } from '$hooks/useMatrixClient';
 import { useDismissOnBack } from '$utils/androidBack';
 import { getCanonicalAliasRoomId, isRoomAlias } from '$utils/matrix';
 import { formatTape, type PlayableProtocol } from '../streams/stats';
+import { PipButton } from '../streams/PipButton';
 import { StreamPicture } from '../streams/StreamPicture';
 import { selectStreamChannel, setPreferredProtocol } from '../streams/streamStore';
 import { useStreamView } from '../streams/useStreamView';
@@ -121,6 +122,7 @@ export function Theater({ stacked = false }: { stacked?: boolean }) {
               );
             })}
           </span>
+          <PipButton className="kolpak-theater__button" />
           <button type="button" className="kolpak-theater__button" onClick={closeTheater}>
             EXIT THEATER
           </button>

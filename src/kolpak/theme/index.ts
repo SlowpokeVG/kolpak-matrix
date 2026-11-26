@@ -7,6 +7,9 @@ import '@fontsource-variable/jetbrains-mono/wght-italic.css';
 import '@fontsource/rubik-spray-paint/400.css';
 import '@fontsource/permanent-marker/400.css';
 import './kolpak-theme.css';
+// Simple mode's overrides, after the theme they override (src/kolpak/simple).
+import '../simple/simple.css';
+import '../simple/simpleTheme.css';
 
 export { kolpakFontSize, kolpakRadii } from './kolpakTheme.css';
 

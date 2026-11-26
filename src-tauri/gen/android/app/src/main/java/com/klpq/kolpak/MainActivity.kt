@@ -1,8 +1,12 @@
 package com.klpq.kolpak
 
 import android.Manifest
+import android.app.PictureInPictureParams
 import android.content.Context
 import android.content.Intent
+import android.content.res.Configuration
+import android.util.Rational
+import androidx.lifecycle.Lifecycle
 import android.content.pm.PackageManager
 import android.graphics.Color
 import android.graphics.drawable.ColorDrawable
@@ -27,6 +31,8 @@ import org.json.JSONObject
 class MainActivity : TauriActivity() {
   private external fun nativeInitStatusBar()
   private external fun nativeShareReceived()
+  // Kolpak: tells the webview the stream picture-in-picture window opened or closed.
+  private external fun nativePipChanged(active: Boolean, dismissed: Boolean)
 
   // Route the hardware back button through the web app (see onWebViewCreate).
   override val handleBackNavigation: Boolean = false
@@ -168,6 +174,16 @@ class MainActivity : TauriActivity() {
     super.onDestroy()
   }
 
+  // Kolpak: the stream's picture in picture. The whole activity shrinks into the floating
+  // window; the webview then shows only the video (src/kolpak/streams/pip.ts). Closing the
+  // window leaves the activity stopped, which is how a dismissal differs from expanding it.
+  override fun onPictureInPictureModeChanged(isInPictureInPictureMode: Boolean, newConfig: Configuration) {
+    super.onPictureInPictureModeChanged(isInPictureInPictureMode, newConfig)
+    val dismissed = !isInPictureInPictureMode && lifecycle.currentState == Lifecycle.State.CREATED
+    runCatching { nativePipChanged(isInPictureInPictureMode, dismissed) }
+      .onFailure { android.util.Log.w("KolpakPip", "notify failed: ${it.message}") }
+  }
+
   companion object {
     private var instance: MainActivity? = null
     // Kolpak: outlives the activity, for the voice session (which does too).
@@ -255,6 +271,24 @@ class MainActivity : TauriActivity() {
       val context = appContext ?: return
       VoiceService.stop(context)
       VoiceAudio.release(context)
+    }
+
+    // Kolpak: picture in picture for the stream, at the video's own shape (kept inside the
+    // range Android accepts, about 1:2.39 to 2.39:1).
+    @JvmStatic
+    fun enterPipNative(width: Int, height: Int) {
+      val activity = instance ?: return
+      activity.runOnUiThread {
+        runCatching {
+          val w = if (width > 0) width else 16
+          val h = if (height > 0) height else 9
+          val ratio = (w.toDouble() / h).coerceIn(1 / 2.39, 2.39)
+          val params = PictureInPictureParams.Builder()
+            .setAspectRatio(Rational((ratio * 1000).toInt(), 1000))
+            .build()
+          activity.enterPictureInPictureMode(params)
+        }.onFailure { android.util.Log.w("KolpakPip", "enter failed: ${it.message}") }
+      }
     }
 
     @JvmStatic

@@ -1,4 +1,5 @@
 import { formatTape } from './stats';
+import { PipButton } from './PipButton';
 import { StreamPicture } from './StreamPicture';
 import { playStream } from './sharedPlayer';
 import { selectStreamChannel } from './streamStore';
@@ -63,6 +64,7 @@ export function StreamDock() {
             <span title="bitrate, kbit/s">
               {view.main?.bitrate ? view.main.bitrate.toLocaleString('en-US') : '--'}
             </span>
+            <PipButton className="kolpak-stream__watch kolpak-stream__pip" />
             <button
               type="button"
               className="kolpak-stream__watch"

@@ -51,6 +51,7 @@ import { useSettingsLinkBaseUrl } from './useSettingsLinkBaseUrl';
 import { Desktop } from './desktop';
 import { VoiceSettingsPage } from '../../../kolpak/voice/VoiceSettingsPage';
 import { voiceSupported } from '../../../kolpak/voice/platform';
+import { SIMPLE_SETTINGS_SECTIONS, useSimpleMode } from '../../../kolpak/simple/simpleMode';
 import { isDesktopTauri } from '$utils/platform';
 import { Accessibility } from './accessibility/Accessibility';
 
@@ -193,6 +194,7 @@ export function Settings({
 
   const [showPersona] = useSetting(settingsAtom, 'showPersonaSetting');
   const isDesktop = isDesktopTauri();
+  const simple = useSimpleMode().enabled;
   const settingsLinkBaseUrl = useSettingsLinkBaseUrl();
   const screenSize = useScreenSizeContext();
   const isControlled = activeSection !== undefined;
@@ -284,10 +286,12 @@ export function Settings({
             (showPersona || sec.id !== 'persona') &&
             (isDesktop || sec.id !== 'desktop') &&
             // Kolpak: voice runs in the desktop and the Android app.
-            (sec.id !== 'voice' || voiceSupported())
+            (sec.id !== 'voice' || voiceSupported()) &&
+            // Kolpak: simple mode keeps only the everyday sections.
+            (!simple || SIMPLE_SETTINGS_SECTIONS.includes(sec.id))
         )
         .map((sec) => sec.id),
-    [showPersona, isDesktop]
+    [showPersona, isDesktop, simple]
   );
 
   const [searchQuery, setSearchQuery] = useState('');

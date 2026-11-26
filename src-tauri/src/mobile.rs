@@ -61,6 +61,34 @@ pub extern "system" fn Java_com_klpq_kolpak_VoiceService_nativeLeaveVoice(
     }
 }
 
+/// Kolpak: the stream's picture-in-picture window opened or closed (`dismissed` when the
+/// user closed it rather than expanding it back).
+#[no_mangle]
+pub extern "system" fn Java_com_klpq_kolpak_MainActivity_nativePipChanged(
+    _env: EnvUnowned,
+    _this: JObject,
+    active: jni::sys::jboolean,
+    dismissed: jni::sys::jboolean,
+) {
+    if let Some(app) = APP_HANDLE.get() {
+        let _ = app.emit(
+            "kolpak://pip",
+            serde_json::json!({ "active": active, "dismissed": dismissed }),
+        );
+    }
+}
+
+/// Kolpak: put the app into picture in picture, shaped like the video (`width` by `height`).
+#[tauri::command]
+pub fn kolpak_enter_pip(width: u32, height: u32) -> Result<(), String> {
+    let clamp = |v: u32| i32::try_from(v).unwrap_or(0);
+    call_activity_static(
+        "enterPipNative",
+        jni_sig!("(II)V"),
+        &[JValue::Int(clamp(width)), JValue::Int(clamp(height))],
+    )
+}
+
 /// `color` is a packed ARGB int (as produced by Android's `Color`).
 #[tauri::command]
 pub fn set_status_bar_color(color: u32) -> Result<(), String> {

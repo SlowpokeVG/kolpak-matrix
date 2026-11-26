@@ -31,10 +31,10 @@ vi.mock('@tauri-apps/api/core', () => ({
   isTauri: () => mockIsTauri.value,
 }));
 
-let syncCallback: (() => void) | undefined;
+let syncCallback: ((current?: string | null, previous?: string | null) => void) | undefined;
 
 vi.mock('./useSyncState', () => ({
-  useSyncState: (_mx: unknown, cb: () => void) => {
+  useSyncState: (_mx: unknown, cb: (current?: string | null, previous?: string | null) => void) => {
     syncCallback = cb;
   },
 }));
@@ -223,6 +223,31 @@ describe('useNetworkRecovery', () => {
 
       vi.advanceTimersByTime(10_000);
       expect(abortClassicSyncPoll).toHaveBeenCalledOnce();
+    });
+  });
+
+  describe('sync failing while on screen (Kolpak)', () => {
+    it('retries at once when sync starts reconnecting while visible', () => {
+      const visState = vi.spyOn(document, 'visibilityState', 'get');
+      visState.mockReturnValue('visible');
+      renderHook(() => useNetworkRecovery({ clientRunning: true } as never));
+
+      syncCallback?.('RECONNECTING', 'SYNCING');
+
+      expect(nudgeReconnect).toHaveBeenCalledWith(expect.anything(), 'retry', undefined);
+      visState.mockRestore();
+    });
+
+    it('does not retry again while it stays degraded, nor while hidden', () => {
+      const visState = vi.spyOn(document, 'visibilityState', 'get');
+      visState.mockReturnValue('visible');
+      renderHook(() => useNetworkRecovery({ clientRunning: true } as never));
+      syncCallback?.('ERROR', 'RECONNECTING');
+      visState.mockReturnValue('hidden');
+      syncCallback?.('RECONNECTING', 'SYNCING');
+
+      expect(nudgeReconnect).not.toHaveBeenCalled();
+      visState.mockRestore();
     });
   });
 

@@ -526,6 +526,8 @@ pub fn run() {
             mobile::start_call_foreground_service,
             #[cfg(target_os = "android")]
             mobile::stop_call_foreground_service,
+            #[cfg(target_os = "android")]
+            mobile::kolpak_enter_pip,
             #[cfg(target_os = "ios")]
             ios::haptic_feedback,
             #[cfg(target_os = "ios")]

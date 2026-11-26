@@ -88,6 +88,29 @@ export function usePlayer(): PlayerSnapshot {
   return useSyncExternalStore(subscribe, getSnapshot);
 }
 
+/** The shared video while something plays, for picture in picture; undefined otherwise. */
+export function activeVideo(): HTMLVideoElement | undefined {
+  return snapshot.status === 'playing' ? video : undefined;
+}
+
+/**
+ * Move the shared video into `container` for a while (Android's picture in picture, where
+ * the page shows nothing but the video). The returned function moves it back where it was
+ * and keeps it playing; call it before `container` leaves the page.
+ */
+export function borrowPlayer(container: HTMLElement): () => void {
+  const target = element();
+  const home = target.parentElement;
+  const wasPlaying = !target.paused;
+  container.appendChild(target);
+  return () => {
+    if (home?.isConnected) home.appendChild(target);
+    if (wasPlaying && target.paused && snapshot.status === 'playing') {
+      void target.play().catch(() => undefined);
+    }
+  };
+}
+
 /**
  * Put the shared video inside `host` while the calling component is mounted. When a view
  * unmounts and no other view has taken the video by the end of the same update, playback

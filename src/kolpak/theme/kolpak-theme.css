@@ -141,10 +141,11 @@
  * Style rules the variables cannot express (DESIGN §2.5): hard edges and solid fills.
  * Radii from folds are zeroed through its own variables in kolpakTheme.css.ts; this catches
  * the hardcoded ones. Add .kolpak-round to the few things that stay round (the live dot).
+ * Simple mode (src/kolpak/simple) keeps the colours but not the hard edges.
  */
-.kolpak-theme *:not(.kolpak-round),
-.kolpak-theme *:not(.kolpak-round)::before,
-.kolpak-theme *:not(.kolpak-round)::after {
+html:not(.kolpak-simple) .kolpak-theme *:not(.kolpak-round),
+html:not(.kolpak-simple) .kolpak-theme *:not(.kolpak-round)::before,
+html:not(.kolpak-simple) .kolpak-theme *:not(.kolpak-round)::after {
   border-radius: 0 !important;
 }
 
