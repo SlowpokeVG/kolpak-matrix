@@ -540,6 +540,16 @@ On the build with native decryption the owner got the notification on time (so t
 - **Only new keys are copied** (`kolpak_push_keys_known` lists the copy's session ids; the webview exports through the wasm `OlmMachine.exportRoomKeys(predicate)`, read from RustCrypto's private `olmMachine`, falling back to a full export), in batches of 2000. A suspect: after the Element key import the account may hold tens of thousands of keys, and a full export every few minutes on a phone may never have finished before the app went to the background.
 - **Room names**: the owner's homeserver leaves `room_name` out of pushes (the title was the sender). The webview writes `{roomId: name}` to `<data>/kolpak-push-keys/room-names.json` with each copy; the plugin reads it (`KolpakRoomNames.kt`).
 
+### 2026-11-26 — simple mode: one list of chats, and the main room really opens
+
+The owner: on start simple mode showed Home with "No rooms" (all their rooms are in the space "mydak") instead of the main room, and asked for one list of all chats without the column of spaces, with one of them open by default. Reproduced on the local Synapse (a space with two rooms, a DM, three members in the main room) with the web build at phone size.
+
+- **Why the main room never opened.** `SimpleMainRoom`'s effect depended on `useRoomNavigate()`'s function, which changes while the first sync fills in spaces and direct chats (`roomToParentsAtom`, `mDirectAtom`); the change cleared the polling timer, and the re-run returned at once because the once-per-start flag was already set. The effect now depends on the client only, keeps `navigate` in a ref, and sets the flag only when it opened the room or gave up. Regression test `src/kolpak/simple/SimpleMainRoom.test.tsx` (changes `mDirectAtom` mid-wait; fails on the old code).
+- **One list.** In simple mode `useHomeRooms(…, includeDirects)` gives Home every joined room, those in spaces and the direct chats too, latest activity first; `HomeRouteRoomProvider` opens any of them under `/home/` (direct chats flagged as direct), and the main room opens there as well, so back always leads to that list.
+- **No column of spaces on a phone** in simple mode (`SidebarNav` renders nothing at mobile size); the bottom bar (Messages, Inbox, Navigate, Account) stays, and Navigate still reaches spaces and explore. Desktop keeps the rail: settings and the account live there.
+
+Checked in the browser: restart opens "TT main chat" under `/home/`; back shows the DM, the main chat and the space's other room in one list with no rail; the DM and the space room open from it with the composer.
+
 ## Starting a new Claude session on this
 
 Open the session in a local clone of this repo and say something like:

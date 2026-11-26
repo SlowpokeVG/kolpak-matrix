@@ -62,6 +62,7 @@ import {
 import { UseStateProvider } from '$components/UseStateProvider';
 import { JoinAddressPrompt } from '$components/join-address-prompt';
 import { useHomeRooms } from './useHomeRooms';
+import { mDirectAtom } from '$state/mDirectList';
 import { useSidebarWidth } from '$hooks/useSidebarWidth';
 import { useClientConfig } from '$hooks/useClientConfig';
 import { getMxIdServer } from '$utils/mxIdHelper';
@@ -164,7 +165,10 @@ export function Home() {
   const clientConfig = useClientConfig();
   const scrollRef = useRef<HTMLDivElement>(null);
   const [isShowingAllRoomsInHome] = useSetting(settingsAtom, 'isShowingAllRoomsInHome');
-  const rooms = useHomeRooms(isShowingAllRoomsInHome);
+  // Kolpak: simple mode lists every chat here (useHomeRooms).
+  const simple = useSimpleMode().enabled;
+  const rooms = useHomeRooms(isShowingAllRoomsInHome, simple);
+  const mDirects = useAtomValue(mDirectAtom);
   const notificationPreferences = useRoomsNotificationPreferencesContext();
   const roomToUnread = useAtomValue(roomToUnreadAtom);
   const navigate = useNavigate();
@@ -202,7 +206,6 @@ export function Home() {
   const defaultCategoryClosed = closedCategories.has(DEFAULT_CATEGORY_ID);
   // Kolpak: simple mode lists rooms like a messenger, latest activity first, and drops the
   // room-management actions above the list.
-  const simple = useSimpleMode().enabled;
   const sortRoomsByActivity = defaultCategoryClosed || isShowingAllRoomsInHome || simple;
   const orderedRooms = useMemo(
     () =>
@@ -460,6 +463,7 @@ export function Home() {
                         <RoomNavItem
                           room={room}
                           selected={selected}
+                          direct={simple && mDirects.has(room.roomId)}
                           showAvatar={showIcons()}
                           hideText={hideText}
                           linkPath={

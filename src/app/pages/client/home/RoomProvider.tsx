@@ -9,6 +9,9 @@ import { useSearchParamsViaServers } from '$hooks/router/useSearchParamsViaServe
 import { useHomeRooms } from './useHomeRooms';
 import { useSetting } from '$state/hooks/settings';
 import { settingsAtom } from '$state/settings';
+import { useAtomValue } from 'jotai';
+import { mDirectAtom } from '$state/mDirectList';
+import { useSimpleMode } from '../../../../kolpak/simple/simpleMode';
 
 export function HomeRouteRoomProvider({
   roomIdOrAlias: roomIdOrAliasProp,
@@ -21,7 +24,11 @@ export function HomeRouteRoomProvider({
 }) {
   const mx = useMatrixClient();
   const [isShowingAllRoomsInHome] = useSetting(settingsAtom, 'isShowingAllRoomsInHome');
-  const rooms = useHomeRooms();
+  // Kolpak: simple mode opens every chat from the home list, direct chats included, so back
+  // leads to that one list.
+  const simple = useSimpleMode().enabled;
+  const mDirects = useAtomValue(mDirectAtom);
+  const rooms = useHomeRooms(false, simple);
 
   const { roomIdOrAlias: encodedRoomIdOrAlias, eventId: encodedEventId } = useParams();
   const roomIdOrAlias =
@@ -45,7 +52,7 @@ export function HomeRouteRoomProvider({
 
   return (
     <RoomProvider key={room.roomId} value={room}>
-      <IsDirectRoomProvider value={false}>
+      <IsDirectRoomProvider value={simple && mDirects.has(room.roomId)}>
         <DisplayedEventIdProvider value={eventId}>{children}</DisplayedEventIdProvider>
       </IsDirectRoomProvider>
     </RoomProvider>
