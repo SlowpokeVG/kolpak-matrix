@@ -47,6 +47,12 @@ const createRoom = () =>
     emit: () => {},
     getTimelineForEvent: () => undefined,
     getMember: () => undefined,
+    // Kolpak: read receipts under messages (src/kolpak/receipts) read these.
+    getLiveTimeline: () => ({ getEvents: () => [] }),
+    getUsersReadUpTo: () => [],
+    on: () => {},
+    removeListener: () => {},
+    client: { getUserId: () => '@me:example.com' },
   }) as any;
 
 const createMessageEvent = () =>

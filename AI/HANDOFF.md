@@ -483,6 +483,18 @@ The owner asked for the Android app on Sable's Android project with all of Kolpa
 
 **Bindings trap.** `tauri-typegen` turns a literal event name in `app.emit("…")` into a listener function named after it; `"kolpak://pip"` produced `onKolpak://pip`, which broke `tsc` in commit `98515a9`. Emit through a `const` (as `mumble.rs` does); fixed in the next commit.
 
+### 2026-11-26 — notifications, the background connection, read receipts
+
+GIFs stay without a key for now (owner's call).
+
+**How notifications reach the phone.** The FOSS build has no Firebase, so Sable's notifications plugin is its own UnifiedPush distributor: the homeserver pushes to the public UnifiedPush Matrix gateway (`matrix.gateway.unifiedpush.org`), which forwards to a topic on the public `ntfy.sh`, which the app holds a websocket to from `EmbeddedPushService`, a foreground service. That service is the "Background connection" notification. Both public services are Sable's defaults (`UP_PUBLIC_GATEWAY`, `DEFAULT_EMBEDDED_GATEWAY` in `UnifiedPushNotifications.ts`); a self-hosted gateway and ntfy would go in `config.json` (`pushTransport.unifiedPushGatewayUrl`, `unifiedPushEmbeddedServerUrl`).
+
+**"Encrypted message" in the pop-up, the text in the shade.** Both push paths (full event and event-id-only) posted a baseline "Encrypted message" with sound first and filled in the decrypted text silently after; the heads-up pop-up shows the first post. Now each path waits up to 1.5 s (`QUICK_PREVIEW_MS`) for the decrypted text before the first post, and only falls back to the old baseline-then-fill-in when decryption takes longer (a room key still on its way). Eight of Sable's tests described the old order and were updated; one new test for the event-id-only path.
+
+**"Background connection".** Android requires a foreground service to show a notification; it cannot be removed from the app's side, but the user can switch its channel (`embedded-push`) off and the service keeps running. Settings → Notifications → "Hide “Background connection”" opens that channel's Android settings page (`kolpak_open_background_connection_settings` → `MainActivity.openBackgroundConnectionSettingsNative`). While in voice there is still the separate voice notification with Leave.
+
+**Read receipts under messages** (`src/kolpak/receipts`), as Element shows them: up to three 16 px avatars and "+N" under the last message each person has read; tapping opens Sable's read-receipts list. One computation per room, shared by all messages, recomputed (batched 50 ms) on receipts, timeline changes, local-echo updates and redactions. A receipt on something not drawn as a message (a reaction, an edit, a join) is shown under the message before it. Sable's "… is following the conversation" line in the room view is gone (its placeholder keeps the spacing; the thread drawer still has it). Hidden when Sable's "hide read receipts" is on. Tests for the mapping; Sable's Message test mock gained the room methods this reads.
+
 ## Starting a new Claude session on this
 
 Open the session in a local clone of this repo and say something like:

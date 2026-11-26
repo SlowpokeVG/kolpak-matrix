@@ -283,7 +283,9 @@ describe('UnifiedPushNotifications', () => {
     }
   );
 
-  it('posts an encrypted baseline before a hanging local decryption completes', async () => {
+  // Kolpak: the first post waits up to QUICK_PREVIEW_MS (1.5 s) for the text, so the
+  // pop-up shows it; a decryption that hangs past that gets the baseline, then a silent fill-in.
+  it('posts an encrypted baseline once a hanging decryption outlasts the quick wait', async () => {
     matrixClient.getRoom.mockReturnValue(makeRoom());
     let resolveDecryption!: (content: Record<string, unknown>) => void;
     const decryption = new Promise<Record<string, unknown>>((resolve) => {
@@ -304,7 +306,10 @@ describe('UnifiedPushNotifications', () => {
 
     await listenAndPush(encryptedPush('$baseline:example.com'));
 
-    await vi.waitFor(() => expect(order).toEqual(['post:You: Encrypted message', 'decrypt']));
+    await vi.waitFor(
+      () => expect(order).toEqual(['decrypt', 'post:You: Encrypted message', 'decrypt']),
+      { timeout: 3000 }
+    );
 
     resolveDecryption({
       clearEvent: {
@@ -313,6 +318,12 @@ describe('UnifiedPushNotifications', () => {
       },
     });
     await vi.waitFor(() => expect(notificationsApi.sendNotification).toHaveBeenCalledTimes(2));
+    const baseline = notificationsApi.sendNotification.mock.calls[0]?.[0];
+    expect(notificationsApi.sendNotification.mock.calls[1]?.[0]).toMatchObject({
+      body: 'You: decrypted message',
+      silent: true,
+      id: (baseline as Record<string, unknown>).id,
+    });
   });
 
   it('keeps the room header for a named two-member conversation', async () => {
@@ -421,7 +432,7 @@ describe('UnifiedPushNotifications', () => {
     expect(notificationsApi.removeChannel).toHaveBeenCalledWith('messages');
   });
 
-  it('silently updates the same notification after encrypted decryption succeeds', async () => {
+  it('posts the decrypted text at once when decryption is quick', async () => {
     matrixClient.getRoom.mockReturnValue(makeRoom());
     matrixClient.getCrypto.mockReturnValue({
       decryptEvent: vi.fn<() => Promise<Record<string, unknown>>>().mockResolvedValue({
@@ -434,17 +445,10 @@ describe('UnifiedPushNotifications', () => {
 
     await listenAndPush(encryptedPush('$success:example.com'));
 
-    await vi.waitFor(() => expect(notificationsApi.sendNotification).toHaveBeenCalledTimes(2));
-    const baseline = notificationsApi.sendNotification.mock.calls[0]?.[0];
-    const enrichment = notificationsApi.sendNotification.mock.calls[1]?.[0];
-    expect(baseline).toMatchObject({
-      body: 'You: Encrypted message',
-      silent: false,
-    });
-    expect(enrichment).toMatchObject({
+    await vi.waitFor(() => expect(notificationsApi.sendNotification).toHaveBeenCalledOnce());
+    expect(notificationsApi.sendNotification.mock.calls[0]?.[0]).toMatchObject({
       body: 'You: decrypted message',
-      silent: true,
-      id: (baseline as Record<string, unknown>).id,
+      silent: false,
     });
   });
 
@@ -461,7 +465,10 @@ describe('UnifiedPushNotifications', () => {
 
     await listenAndPush(encryptedPush('$tauri-sdk:example.com'));
 
-    await vi.waitFor(() => expect(notificationsApi.sendNotification).toHaveBeenCalledTimes(2));
+    await vi.waitFor(() => expect(notificationsApi.sendNotification).toHaveBeenCalledOnce());
+    expect(notificationsApi.sendNotification.mock.calls[0]?.[0]).toMatchObject({
+      body: 'You: SDK decrypted message',
+    });
     expect(decryptEvent).toHaveBeenCalledOnce();
     expect(engineDecryptPush).not.toHaveBeenCalled();
   });
@@ -476,7 +483,8 @@ describe('UnifiedPushNotifications', () => {
           .fn<() => Promise<Record<string, unknown>>>()
           .mockImplementation(async () => {
             attempts += 1;
-            if (attempts === 1) throw new Error('MissingRoomKey');
+            // The quick attempt before the first post and the first fill-in attempt.
+            if (attempts <= 2) throw new Error('MissingRoomKey');
             return {
               clearEvent: {
                 type: 'm.room.message',
@@ -488,7 +496,7 @@ describe('UnifiedPushNotifications', () => {
 
       await listenAndPush(encryptedPush('$missing-key-retry:example.com'));
       await vi.waitFor(() => expect(notificationsApi.sendNotification).toHaveBeenCalledOnce());
-      expect(attempts).toBe(1);
+      expect(attempts).toBe(2);
 
       await vi.advanceTimersByTimeAsync(1000);
       await vi.waitFor(() => expect(notificationsApi.sendNotification).toHaveBeenCalledTimes(2));
@@ -539,6 +547,7 @@ describe('UnifiedPushNotifications', () => {
       });
 
       await listenAndPush(encryptedPush('$late:example.com'));
+      await vi.advanceTimersByTimeAsync(2000);
       await vi.waitFor(() => expect(notificationsApi.sendNotification).toHaveBeenCalledOnce());
 
       vi.advanceTimersByTime(30_000);
@@ -572,6 +581,7 @@ describe('UnifiedPushNotifications', () => {
       });
 
       await listenAndPush(encryptedPush('$expired:example.com'));
+      await vi.advanceTimersByTimeAsync(2000);
       await vi.waitFor(() => expect(notificationsApi.sendNotification).toHaveBeenCalledOnce());
 
       // The window, plus the grace for the attempt made as it lapses.
@@ -677,7 +687,9 @@ describe('UnifiedPushNotifications', () => {
 
     const settings = makeSettings();
     await listenAndPush(encryptedPush('$clear:example.com'), settings);
-    await vi.waitFor(() => expect(notificationsApi.sendNotification).toHaveBeenCalledOnce());
+    await vi.waitFor(() => expect(notificationsApi.sendNotification).toHaveBeenCalledOnce(), {
+      timeout: 3000,
+    });
 
     await clearRoomNotification('@user:example.com', '!room:example.com');
     resolveDecryption({
@@ -811,6 +823,29 @@ describe('UnifiedPushNotifications', () => {
     ).resolves.toBeUndefined();
   });
 
+  it('posts a minimal push with its text when the event arrives quickly (Kolpak)', async () => {
+    matrixClient.getRoom.mockReturnValue(makeRoom());
+    matrixClient.fetchRoomEvent.mockResolvedValue({
+      type: 'm.room.message',
+      room_id: '!room:example.com',
+      event_id: '$minimal-quick:example.com',
+      sender: '@alice:example.com',
+      content: { body: 'quick plaintext' },
+    });
+
+    await listenAndPush({
+      room_id: '!room:example.com',
+      event_id: '$minimal-quick:example.com',
+      counts: { unread: 1 },
+    });
+
+    await vi.waitFor(() => expect(notificationsApi.sendNotification).toHaveBeenCalledOnce());
+    expect(String(notificationsApi.sendNotification.mock.calls[0]?.[0]?.body)).toContain(
+      'quick plaintext'
+    );
+    expect(notificationsApi.sendNotification.mock.calls[0]?.[0]).toMatchObject({ silent: false });
+  });
+
   it('checks preview policy again after a minimal event resolves', async () => {
     matrixClient.getRoom.mockReturnValue(makeRoom());
     let resolveEvent!: (event: unknown) => void;
@@ -828,7 +863,10 @@ describe('UnifiedPushNotifications', () => {
       },
       settings
     );
-    await vi.waitFor(() => expect(notificationsApi.sendNotification).toHaveBeenCalledOnce());
+    // The fetch hangs past the quick wait (QUICK_PREVIEW_MS), so the baseline goes up first.
+    await vi.waitFor(() => expect(notificationsApi.sendNotification).toHaveBeenCalledOnce(), {
+      timeout: 3000,
+    });
     settings.showMessageContent = false;
     resolveEvent({
       type: 'm.room.message',

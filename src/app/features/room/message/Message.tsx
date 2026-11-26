@@ -128,6 +128,7 @@ import { useMenuAnchor } from '$hooks/useMenuAnchor';
 import { ThemeKind, useActiveTheme } from '$hooks/useTheme';
 import { useAccessibleNameColor } from '$hooks/useAccessibleNameColor';
 import { shouldIgnoreMessageLongPress } from './messageTouch';
+import { ReadReceiptAvatars } from '../../../../kolpak/receipts/ReadReceiptAvatars';
 
 const clamp = (str: string, len: number) => (str.length > len ? `${str.slice(0, len)}...` : str);
 
@@ -1057,6 +1058,8 @@ function MessageInternal(
           handleSwipeActionChange={setSwipeActionMode}
           align={useRightBubbles && senderId === mx.getUserId() ? 'right' : 'left'}
         />
+        {/* Kolpak: who has read up to here, as avatars (replaces the "following" line). */}
+        {!hideReadReceipts && <ReadReceiptAvatars room={room} eventId={mEvent.getId()} />}
       </div>
     </MessageBase>
   );

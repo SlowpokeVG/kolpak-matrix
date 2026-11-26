@@ -13,8 +13,6 @@ import { Page } from '$components/page';
 import { useKeyDown } from '$hooks/useKeyDown';
 import { editableActiveElement } from '$utils/dom';
 import { isMobileOrTablet } from '$utils/platform';
-import { settingsAtom } from '$state/settings';
-import { useSetting } from '$state/hooks/settings';
 import { useRoomPermissions } from '$hooks/useRoomPermissions';
 import { useRoomCreators } from '$hooks/useRoomCreators';
 import { ScreenSize, useScreenSizeContext } from '$hooks/useScreenSize';
@@ -32,7 +30,7 @@ import { CallView } from '$features/call/CallView';
 import { useRoom } from '$hooks/useRoom';
 import { useMessageEdit } from '$hooks/useMessageEdit';
 import { useAlive } from '$hooks/useAlive';
-import { RoomViewFollowing, RoomViewFollowingPlaceholder } from './RoomViewFollowing';
+import { RoomViewFollowingPlaceholder } from './RoomViewFollowing';
 import { RoomInput } from './RoomInput';
 import { RoomTombstone } from './RoomTombstone';
 import { RoomViewTyping } from './RoomViewTyping';
@@ -76,7 +74,6 @@ export function RoomView({ eventId }: { eventId?: string }) {
   const roomViewRef = useRef<HTMLDivElement>(null);
   const editLastMessageRef = useRef<(() => void) | undefined>(undefined);
 
-  const [hideReads] = useSetting(settingsAtom, 'hideReads');
   const screenSize = useScreenSizeContext();
 
   const room = useRoom();
@@ -217,7 +214,9 @@ export function RoomView({ eventId }: { eventId?: string }) {
                 )}
               </>
             )}
-            {hideReads ? <RoomViewFollowingPlaceholder /> : <RoomViewFollowing room={room} />}
+            {/* Kolpak: who has read what shows under the messages themselves
+                (src/kolpak/receipts), so the "following the conversation" line goes. */}
+            <RoomViewFollowingPlaceholder />
           </div>
         </Box>
       </SwipeableChatWrapper>

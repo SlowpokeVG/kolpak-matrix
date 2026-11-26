@@ -93,6 +93,16 @@ pub fn kolpak_enter_pip(width: u32, height: u32) -> Result<(), String> {
     )
 }
 
+/// Kolpak: open Android's settings for the "Background connection" notification channel.
+#[tauri::command]
+pub fn kolpak_open_background_connection_settings() -> Result<(), String> {
+    call_activity_static(
+        "openBackgroundConnectionSettingsNative",
+        jni_sig!("()V"),
+        &[],
+    )
+}
+
 /// `color` is a packed ARGB int (as produced by Android's `Color`).
 #[tauri::command]
 pub fn set_status_bar_color(color: u32) -> Result<(), String> {

@@ -3,7 +3,7 @@
 //   state: "done" | "now" | "todo"
 //   part:  0..1, how far the "now" step is (optional)
 window.KOLPAK_PROGRESS = {
-  now: "Simple mode, stream picture in picture, quicker reconnect after resume",
+  now: "Notifications decrypt before popping up; read receipts under messages",
   steps: [
     { name: "docs",    state: "done" },
     { name: "fork",    state: "now", part: 0.85 },

@@ -473,6 +473,34 @@ function holdsPlaintext(event: MatrixEvent): boolean {
   );
 }
 
+// Kolpak: how long a push waits for its text before the first notification goes up. The
+// first post is the one that makes a sound and pops up on screen; posting "Encrypted
+// message" and fixing it a moment later left the pop-up saying "Encrypted message" while
+// the shade showed the text. With the room key at hand decryption takes milliseconds;
+// otherwise the old way (post now, fill in the text later, silently) still applies.
+const QUICK_PREVIEW_MS = 1500;
+
+function withinQuickPreview<T>(work: Promise<T | undefined>): Promise<T | undefined> {
+  return Promise.race([
+    work.catch(() => undefined),
+    new Promise<undefined>((resolve) => {
+      setTimeout(() => resolve(undefined), QUICK_PREVIEW_MS);
+    }),
+  ]);
+}
+
+/** The event decrypted within QUICK_PREVIEW_MS, or undefined. */
+function quickDecrypt(
+  mx: MatrixClient,
+  event: MatrixEvent | undefined
+): Promise<MatrixEvent | undefined> {
+  if (!event) return Promise.resolve(undefined);
+  if (holdsPlaintext(event)) return Promise.resolve(event);
+  return withinQuickPreview(
+    mx.decryptEventIfNeeded(event).then(() => (holdsPlaintext(event) ? event : undefined))
+  );
+}
+
 const DECRYPT_RETRY_DELAYS_MS = [1000, 2000, 5000, 10_000, 30_000, 60_000] as const;
 
 const FINAL_DECRYPT_ATTEMPT_TIMEOUT_MS = 10_000;
@@ -751,6 +779,24 @@ async function handleRichPushPayload(
         }
       }
 
+      // Kolpak: try for the text before the first post (see QUICK_PREVIEW_MS).
+      if (needsEncryptedPreviewEnrichment && eventId) {
+        const quick = await quickDecrypt(
+          settings.mx,
+          buildEncryptedPreviewEvent(roomId, eventId, pushData)
+        );
+        if (quick) {
+          previewText = resolveNotificationPreviewText({
+            content: quick.getContent(),
+            eventType: quick.getType(),
+            isEncryptedRoom: true,
+            showMessageContent: settings.showMessageContent,
+            showEncryptedMessageContent: settings.showEncryptedMessageContent,
+          });
+          needsEncryptedPreviewEnrichment = false;
+        }
+      }
+
       const sender: NotifPerson | undefined = senderName
         ? { name: senderName, key: senderId }
         : undefined;
@@ -1008,6 +1054,37 @@ async function handleMinimalPushPayload(
     }
   }
 
+  // Kolpak: fetch and decrypt for a moment before the first post (see QUICK_PREVIEW_MS);
+  // the same fetch is reused for the later fill-in if it takes longer.
+  let pendingFetch: Promise<MatrixEvent | undefined> | undefined;
+  if (
+    (!previewText || inMemoryStillEncrypted) &&
+    eventId &&
+    settings.showMessageContent &&
+    (!isEncryptedRoom || settings.showEncryptedMessageContent)
+  ) {
+    pendingFetch = resolvePreviewEvent(settings.mx, roomId, eventId);
+    const quick = await withinQuickPreview(
+      pendingFetch.then((fetched) => (fetched && holdsPlaintext(fetched) ? fetched : undefined))
+    );
+    if (quick) {
+      previewText = resolveNotificationPreviewText({
+        content: quick.getContent(),
+        eventType: quick.getType(),
+        isEncryptedRoom: isEncryptedRoom || quick.isEncrypted(),
+        showMessageContent: settings.showMessageContent,
+        showEncryptedMessageContent: settings.showEncryptedMessageContent,
+      });
+      inMemoryStillEncrypted = false;
+      const quickSender = quick.getSender();
+      if (quickSender) {
+        senderId = quickSender;
+        senderName =
+          room?.getMember(quickSender)?.name ?? getMxIdLocalPart(quickSender) ?? quickSender;
+      }
+    }
+  }
+
   const hasInMemoryPreview = Boolean(previewText) && !inMemoryStillEncrypted;
   if (!previewText) {
     previewText = isEncryptedRoom ? 'Encrypted message' : 'New message';
@@ -1072,7 +1149,7 @@ async function handleMinimalPushPayload(
     settings.showMessageContent &&
     (!isEncryptedRoom || settings.showEncryptedMessageContent)
   ) {
-    resolvePreviewEvent(settings.mx, roomId, eventId)
+    (pendingFetch ?? resolvePreviewEvent(settings.mx, roomId, eventId))
       .then((fetched) => {
         if (!fetched) return;
 

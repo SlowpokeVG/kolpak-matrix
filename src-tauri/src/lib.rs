@@ -528,6 +528,8 @@ pub fn run() {
             mobile::stop_call_foreground_service,
             #[cfg(target_os = "android")]
             mobile::kolpak_enter_pip,
+            #[cfg(target_os = "android")]
+            mobile::kolpak_open_background_connection_settings,
             #[cfg(target_os = "ios")]
             ios::haptic_feedback,
             #[cfg(target_os = "ios")]

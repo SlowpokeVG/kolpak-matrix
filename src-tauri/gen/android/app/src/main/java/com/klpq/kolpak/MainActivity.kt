@@ -302,6 +302,28 @@ class MainActivity : TauriActivity() {
       }
     }
 
+    // Kolpak: the system settings page of the notifications plugin's "Background connection"
+    // channel (EmbeddedPushService), where the user can switch that notification off. The
+    // service keeps running, so messages still arrive; only the shade entry goes.
+    @JvmStatic
+    fun openBackgroundConnectionSettingsNative() {
+      val activity = instance ?: return
+      activity.runOnUiThread {
+        runCatching {
+          val intent = Intent(android.provider.Settings.ACTION_CHANNEL_NOTIFICATION_SETTINGS)
+            .putExtra(android.provider.Settings.EXTRA_APP_PACKAGE, activity.packageName)
+            .putExtra(android.provider.Settings.EXTRA_CHANNEL_ID, "embedded-push")
+          activity.startActivity(intent)
+        }.recoverCatching {
+          // No such channel yet (background push off) or an unusual system: the app's page.
+          activity.startActivity(
+            Intent(android.provider.Settings.ACTION_APP_NOTIFICATION_SETTINGS)
+              .putExtra(android.provider.Settings.EXTRA_APP_PACKAGE, activity.packageName)
+          )
+        }
+      }
+    }
+
     @JvmStatic
     fun stopCallForegroundServiceNative() {
       val activity = checkNotNull(instance) { "MainActivity is unavailable" }
