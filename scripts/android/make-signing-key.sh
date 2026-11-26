@@ -1,10 +1,12 @@
 #!/usr/bin/env bash
-# Kolpak: make the Android signing key once, and print what to put in the GitHub secrets.
+# Kolpak: make a new Android signing key, and print what to put in the GitHub secrets.
 #
-# Android only installs an update over an installed app when both are signed with the same
-# key, so every build that people install must come from this one key. Keep the .jks file
-# and the password somewhere safe and out of the repository: whoever holds them can publish
-# updates that phones accept as Kolpak.
+# Kolpak's current release key lives in src-tauri/gen/android/signing (kept in the repo on
+# the owner's call). Use this script only to start over with a private key, knowing that
+# Android installs an update only when it is signed with the same key as the installed app:
+# a new key means everyone uninstalls and installs again. To keep the current key but take
+# it out of the repo, put it into the secrets instead (base64 of signing/kolpak-release.jks,
+# alias and password from signing/kolpak-release.properties) and delete that folder.
 #
 #   scripts/android/make-signing-key.sh [output.jks]
 #

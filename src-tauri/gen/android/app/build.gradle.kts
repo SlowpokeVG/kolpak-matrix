@@ -35,7 +35,13 @@ android {
     }
     signingConfigs {
         create("release") {
-            val keystorePropertiesFile = rootProject.file("keystore.properties")
+            // keystore.properties (written by CI from the ANDROID_KEY_* secrets, or a local
+            // key) wins; otherwise Kolpak's release key kept in signing/, so every build
+            // can update the previous one.
+            val keystorePropertiesFile = listOf(
+                rootProject.file("keystore.properties"),
+                rootProject.file("signing/kolpak-release.properties"),
+            ).firstOrNull { it.exists() } ?: rootProject.file("keystore.properties")
             if (keystorePropertiesFile.exists()) {
                 val keystoreProperties = Properties()
                 keystoreProperties.load(FileInputStream(keystorePropertiesFile))

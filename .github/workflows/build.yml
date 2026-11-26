@@ -4,9 +4,8 @@ name: Build
 # requests into it, so a broken build shows up before it lands). On main, once everything has
 # built, it publishes a GitHub release "Kolpak build N" (tag build-N, N = this workflow's run
 # number) with every installer and the APK attached, marked latest. Pull requests only build.
-# No desktop code signing and no auto-updater yet. The APK is signed with the key in the
-# ANDROID_KEY_* secrets (scripts/android/make-signing-key.sh), or with a throwaway key when
-# they are not set.
+# No desktop code signing and no auto-updater yet. The APK is signed with Kolpak's release
+# key from src-tauri/gen/android/signing, or with the ANDROID_KEY_* secrets when they are set.
 
 on:
   push:
@@ -122,28 +121,16 @@ jobs:
       - name: Setup Android signing
         shell: bash
         run: |
+          # Without the secrets Gradle signs with the key kept in the repository
+          # (src-tauri/gen/android/signing). The secrets, when set, take precedence.
+          [ -n "$ANDROID_KEY_BASE64" ] || { echo "Signing with the repository key."; exit 0; }
           cd src-tauri/gen/android
-          if [ -n "$ANDROID_KEY_BASE64" ]; then
-            base64 -d <<< "$ANDROID_KEY_BASE64" > "$RUNNER_TEMP/keystore.jks"
-            {
-              echo "keyAlias=$ANDROID_KEY_ALIAS"
-              echo "password=$ANDROID_KEY_PASSWORD"
-              echo "storeFile=$RUNNER_TEMP/keystore.jks"
-            } > keystore.properties
-          else
-            # No key configured: sign with a throwaway one so the APK installs at all. Phones
-            # will refuse the next build as an update (different key) until the secrets exist.
-            echo "::warning::ANDROID_KEY_* secrets are not set; the APK is signed with a throwaway key. See scripts/android/make-signing-key.sh."
-            PASSWORD=$(openssl rand -hex 16)
-            keytool -genkeypair -keystore "$RUNNER_TEMP/keystore.jks" -storetype PKCS12 \
-              -alias kolpak -keyalg RSA -keysize 2048 -validity 365 \
-              -storepass "$PASSWORD" -keypass "$PASSWORD" -dname "CN=Kolpak throwaway"
-            {
-              echo "keyAlias=kolpak"
-              echo "password=$PASSWORD"
-              echo "storeFile=$RUNNER_TEMP/keystore.jks"
-            } > keystore.properties
-          fi
+          base64 -d <<< "$ANDROID_KEY_BASE64" > "$RUNNER_TEMP/keystore.jks"
+          {
+            echo "keyAlias=$ANDROID_KEY_ALIAS"
+            echo "password=$ANDROID_KEY_PASSWORD"
+            echo "storeFile=$RUNNER_TEMP/keystore.jks"
+          } > keystore.properties
 
       - name: Build the APK
         shell: bash

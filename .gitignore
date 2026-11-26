@@ -46,6 +46,8 @@ src-tauri/gen/android/app/build/
 src-tauri/gen/apple/*
 # Tauri Android release keystore
 *.jks
+# Kolpak's release key is kept in the repo on purpose; see the .properties beside it.
+!src-tauri/gen/android/signing/kolpak-release.jks
 
 # Tauri-typegen cache
 .typecache

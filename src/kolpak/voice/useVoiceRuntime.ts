@@ -1,5 +1,6 @@
 import { useEffect } from 'react';
 import { isDesktopTauri } from '$utils/platform';
+import { useMumbleLinks } from './useMumbleLinks';
 import { useVoiceSettings } from './useVoiceSettings';
 import {
   applyCallAudio,
@@ -12,7 +13,7 @@ import {
 /**
  * Keeps the native voice side in step with the settings, for as long as the client is
  * mounted: starts the event bridge, pushes transmit settings whenever they change, and
- * watches the push-to-talk key.
+ * watches the push-to-talk key, and joins Mumble links clicked anywhere in the client.
  *
  * On Windows the native side reads the push-to-talk key itself, system-wide, and ignores
  * what this listener reports. Elsewhere this listener is all there is, so push to talk
@@ -24,6 +25,9 @@ export function useVoiceRuntime(): void {
   useEffect(() => {
     startVoiceBridge();
   }, []);
+
+  // Mumble links in chat join through here.
+  useMumbleLinks(settings.username);
 
   useEffect(() => {
     void applyTransmitSettings({

@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState, useSyncExternalStore } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { useClientConfig } from '$hooks/useClientConfig';
 import { useDismissOnBack } from '$utils/androidBack';
 import { StreamDock } from '../streams/StreamDock';
@@ -14,6 +14,7 @@ import { useVoiceSettings } from '../voice/useVoiceSettings';
 import { connectVoice, useVoice } from '../voice/voiceStore';
 import '../streams/stream-dock.css';
 import '../voice/voice-dock.css';
+import { setLiveSheetOpen, useLiveSheetOpen } from './liveSheetStore';
 import './mobile-live.css';
 
 // The live dock on a phone (AI/HANDOFF.md, "Android"). The desktop has a status bar along
@@ -25,28 +26,6 @@ import './mobile-live.css';
 // - tapping the bar opens the live panel over the client: the stream player (WATCH opens
 //   theater, which on a phone is the picture over the chat), the voice tree with join and
 //   leave, and a big TALK button. Back or the close button puts it away.
-
-let sheetOpen = false;
-const sheetListeners = new Set<() => void>();
-
-export function setLiveSheetOpen(next: boolean): void {
-  if (next === sheetOpen) return;
-  sheetOpen = next;
-  sheetListeners.forEach((listener) => listener());
-}
-
-const subscribeSheet = (listener: () => void): (() => void) => {
-  sheetListeners.add(listener);
-  return () => {
-    sheetListeners.delete(listener);
-  };
-};
-
-const getSheetOpen = (): boolean => sheetOpen;
-
-export function useLiveSheetOpen(): boolean {
-  return useSyncExternalStore(subscribeSheet, getSheetOpen);
-}
 
 const isEditable = (element: Element | null): boolean =>
   element instanceof HTMLElement &&
@@ -154,6 +133,8 @@ export function MobileLiveBar({ hidden = false }: { hidden?: boolean }) {
   );
 }
 
+const closeSheet = () => setLiveSheetOpen(false);
+
 export function LiveSheet() {
   const open = useLiveSheetOpen();
   // Theater covers the panel; the panel steps aside so the player has one host, and comes
@@ -161,8 +142,7 @@ export function LiveSheet() {
   const theater = useTheater().open;
   const { streamStatsUrl } = useClientConfig();
   const hasVoice = voiceSupported();
-  const close = () => setLiveSheetOpen(false);
-  useDismissOnBack(close, open && !theater);
+  useDismissOnBack(closeSheet, open && !theater);
 
   if (!open || theater) return null;
 
@@ -173,7 +153,7 @@ export function LiveSheet() {
         <button
           type="button"
           className="kolpak-live-sheet__close"
-          onClick={close}
+          onClick={closeSheet}
           aria-label="close the live panel"
         >
           <svg viewBox="0 0 20 20" width="20" height="20" aria-hidden="true">

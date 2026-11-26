@@ -3,6 +3,7 @@ import { invoke } from '@tauri-apps/api/core';
 import { listen, type UnlistenFn } from '@tauri-apps/api/event';
 import { isAndroidTauri } from '$utils/platform';
 import { gainsFor, getPeopleSettings, subscribePeople } from './peopleSettings';
+import { findChannelByPath, sameServer, type MumbleTarget } from './mumbleLinks';
 import { ensureMicrophonePermission, voiceSupported } from './platform';
 import {
   EMPTY_SNAPSHOT,
@@ -163,6 +164,9 @@ const writePin = (host: string, port: number, fingerprint: string): void => {
   }
 };
 
+/** The server of the current (or last) connection, to tell whether a link points at it. */
+let connectedServer: { host: string; port: number } | undefined;
+
 export type VoiceTarget = {
   host: string;
   port: number;
@@ -176,6 +180,7 @@ export type VoiceTarget = {
 export async function connectVoice({ host, port, username }: VoiceTarget): Promise<void> {
   if (!voiceSupported()) return;
   startVoiceBridge();
+  connectedServer = { host, port };
   // Android: the system asks once; without the microphone we join listening only.
   const microphone = await ensureMicrophonePermission();
   setState({ microphoneDenied: !microphone });
@@ -243,6 +248,70 @@ export async function listInputDevices(): Promise<InputDevice[]> {
 export async function disconnectVoice(): Promise<void> {
   if (!voiceSupported()) return;
   await invoke('mumble_disconnect').catch(() => undefined);
+}
+
+/** Move to a channel on the server we are connected to. */
+export async function joinVoiceChannel(channelId: number): Promise<void> {
+  if (!voiceSupported()) return;
+  await invoke('mumble_join_channel', { channelId }).catch(() => undefined);
+}
+
+/** Resolves with the first state that passes `test`, or undefined after `timeoutMs`. */
+function waitForVoice(
+  test: (current: VoiceState) => boolean,
+  timeoutMs: number
+): Promise<VoiceState | undefined> {
+  if (test(state)) return Promise.resolve(state);
+  return new Promise((resolve) => {
+    const listener = () => {
+      if (!test(state)) return;
+      done(state);
+    };
+    const timer = window.setTimeout(() => done(undefined), timeoutMs);
+    function done(result: VoiceState | undefined) {
+      window.clearTimeout(timer);
+      listeners.delete(listener);
+      resolve(result);
+    }
+    listeners.add(listener);
+  });
+}
+
+/**
+ * Follow a Mumble link from chat: connect to its server unless we are on it already, then
+ * move to the channel it names, if any. `username` is the user's own voice name.
+ * Resolves to whether voice is (still) connected or connecting.
+ */
+export async function joinMumbleLink(target: MumbleTarget, username: string): Promise<boolean> {
+  if (!voiceSupported()) return false;
+  const onIt = state.status !== 'disconnected' && sameServer(connectedServer, target);
+  if (!onIt) {
+    await connectVoice({
+      host: target.host,
+      port: target.port,
+      username: username || target.username || '',
+    });
+  }
+  if (target.channelPath.length === 0) return state.status !== 'disconnected';
+
+  const synced = await waitForVoice(
+    (current) =>
+      current.status === 'disconnected' ||
+      (current.status === 'connected' &&
+        current.snapshot.session !== null &&
+        current.snapshot.channels.length > 0),
+    15_000
+  );
+  if (!synced || synced.status !== 'connected') return false;
+  const channelId = findChannelByPath(synced.snapshot, target.channelPath);
+  if (channelId === undefined) {
+    setState({
+      denied: { reason: `no channel ${target.channelPath.join(' / ')} here`, at: Date.now() },
+    });
+    return true;
+  }
+  await joinVoiceChannel(channelId);
+  return true;
 }
 
 const subscribe = (listener: () => void): (() => void) => {
