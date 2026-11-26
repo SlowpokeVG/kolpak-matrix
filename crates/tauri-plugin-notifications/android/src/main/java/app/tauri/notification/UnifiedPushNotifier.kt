@@ -172,6 +172,7 @@ object UnifiedPushNotifier {
         val isInvite = notification.optString("type") == "m.room.member" &&
             notification.optJSONObject("content")?.optString("membership") == "invite"
         val roomName = notification.optString("room_name")
+            .ifEmpty { KolpakRoomNames.lookup(context, roomId) }
         val title = if (isInvite) {
             "New Invitation"
         } else {

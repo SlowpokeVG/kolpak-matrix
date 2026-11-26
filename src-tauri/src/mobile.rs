@@ -132,7 +132,7 @@ pub fn set_immersive_mode(enabled: bool) -> Result<(), String> {
             &[JValue::Bool(enabled)],
         );
         if result.is_err() {
-            let _ = env.exception_clear();
+            env.exception_clear();
         }
         result.map(|_| ())
     })
@@ -165,7 +165,7 @@ pub(crate) fn play_notification_sound(kind: String) -> Result<(), String> {
             &[JValue::Int(code)],
         );
         if result.is_err() {
-            let _ = env.exception_clear();
+            env.exception_clear();
         }
         result.map(|_| ())
     })
@@ -182,7 +182,7 @@ fn call_bar_color(method: &str, color: u32) -> Result<(), String> {
             &[JValue::Int(color as i32)],
         );
         if result.is_err() {
-            let _ = env.exception_clear();
+            env.exception_clear();
         }
         result.map(|_| ())
     })
@@ -199,7 +199,7 @@ fn call_static_method(method: &str) -> Result<(), String> {
             &[],
         );
         if result.is_err() {
-            let _ = env.exception_clear();
+            env.exception_clear();
         }
         result.map(|_| ())
     })
@@ -235,7 +235,7 @@ fn call_activity_static(
     vm.attach_current_thread(|env| {
         let result = env.call_static_method(class, JNIString::new(method), &sig, args);
         if result.is_err() {
-            let _ = env.exception_clear();
+            env.exception_clear();
         }
         result.map(|_| ())
     })

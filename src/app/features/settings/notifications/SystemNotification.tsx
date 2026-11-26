@@ -68,6 +68,7 @@ import {
   switchUnifiedPushDistributorSelection,
 } from './UnifiedPushTransport';
 import { BackgroundConnectionTile } from '../../../../kolpak/notifications/BackgroundConnectionTile';
+import { PushKeysTile } from '../../../../kolpak/notifications/PushKeysTile';
 
 type BackgroundPushKind = NotificationTransportProvider;
 type BackgroundPushPlatform = NotificationTransportPlatform;
@@ -1077,6 +1078,7 @@ export function SystemNotification() {
         <BackgroundPushNotificationSetting />
         {/* Kolpak: a way to the Android setting that hides the background-connection entry. */}
         <BackgroundConnectionTile />
+        <PushKeysTile />
       </SequenceCard>
       <SettingToggle
         title="In-App Notification Sound"

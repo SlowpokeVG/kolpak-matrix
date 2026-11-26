@@ -28,6 +28,9 @@ Kolpak's changes, all in `android/`:
 - **The foreground-service notification** ("Background connection") uses the app's own
   notification icon and says what it is for.
 
+- **Room names** for pushes without `room_name`: `KolpakRoomNames` reads the app's
+  `kolpak-push-keys/room-names.json`.
+
 Search for `Kolpak` in `android/` for the exact places. The unit tests in `android/src/test`
 were updated to match and pass (`./gradlew :tauri-plugin-notifications:testFossDebugUnitTest`
 from `src-tauri/gen/android`; in a cloud session Robolectric needs

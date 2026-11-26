@@ -532,6 +532,14 @@ Fixes:
 
 Checked in the browser: notice after 400 edits, one text after 400 edits, three texts after 400 edits: no chips, read receipt sent, history visible above. 150 real unread messages behind 300 edits: the chip stays and jumps exactly to the "New messages" divider. Unit tests: `src/app/utils/room/liveReadBoundary.test.ts`. Also fixed `edgeToEdgeInsets.test.ts`, which still looked for `MainActivity.kt` under `moe/sable/client` after the Android rebrand. `mediaCache.test.ts` and `mediaTransport.test.ts` fail in this container before and after these changes (a `Blob` from jsdom vs Node's; the container has Node 22, the project asks for 24).
 
+### 2026-11-26 — push text still "Encrypted message": a status screen, incremental copy, room names
+
+On the build with native decryption the owner got the notification on time (so the native path posts), but "Encrypted message" even in the shade. Checked, without the phone: the JNI symbol is exported and R8 kept `PushPayloadDecryptor` and `nativeDecryptPush`; Tauri's `app_local_data_dir` and the plugin's `context.dataDir` are both `activity.dataDir` (`tauri-2.11.5/src/path/android.rs`, `PathPlugin.getDataDir`); app commands need no capability entries (no app manifest in `build.rs`); and a key exported and an event encrypted by matrix-sdk-crypto-wasm (what the webview runs; Node script on the repo's wasm package) decrypt in the native copy (ignored test `decrypts_with_a_wasm_export`, `KOLPAK_WASM_CHECK=<dir>`). So the failure is on the phone, and this build makes it visible:
+
+- **Settings → Notifications → "Message text in notifications"** (`src/kolpak/notifications/PushKeysTile.tsx`, Android): keys in the copy, the last copy (new keys, ms, or its error), the last push (decrypted, or the error from matrix-sdk-crypto), "Copy now", and "Check", which decrypts the newest encrypted message from someone else exactly as a push would be. State in `<data>/kolpak-push-keys/<account>/status.json`, commands `kolpak_push_keys_status`/`_check`.
+- **Only new keys are copied** (`kolpak_push_keys_known` lists the copy's session ids; the webview exports through the wasm `OlmMachine.exportRoomKeys(predicate)`, read from RustCrypto's private `olmMachine`, falling back to a full export), in batches of 2000. A suspect: after the Element key import the account may hold tens of thousands of keys, and a full export every few minutes on a phone may never have finished before the app went to the background.
+- **Room names**: the owner's homeserver leaves `room_name` out of pushes (the title was the sender). The webview writes `{roomId: name}` to `<data>/kolpak-push-keys/room-names.json` with each copy; the plugin reads it (`KolpakRoomNames.kt`).
+
 ## Starting a new Claude session on this
 
 Open the session in a local clone of this repo and say something like:
