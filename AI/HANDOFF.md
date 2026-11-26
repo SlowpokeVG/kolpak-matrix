@@ -479,6 +479,10 @@ The owner asked for the Android app on Sable's Android project with all of Kolpa
 
 **Picture in picture for the stream.** A PIP button next to WATCH in the dock (and so in the phone's live panel) and next to EXIT THEATER, shown while the stream plays. Desktop and browsers use the `<video>`'s own `requestPictureInPicture()` (WebView2, CEF, WKWebView; WebKitGTK has none, so no button there). Android's WebView has no such API: `kolpak_enter_pip` → `MainActivity.enterPipNative` puts the whole activity into Android's PiP window at the video's aspect ratio (clamped to what Android accepts); `onPictureInPictureModeChanged` → `nativePipChanged` → `kolpak://pip`; while active `PipStage` borrows the shared video into a full-screen black stage (`borrowPlayer` in `sharedPlayer.ts`) and hands it back afterwards. Closing the PiP window (the activity is left stopped) stops the stream; expanding it returns to the app as it was.
 
+**PiP, second try (same day).** On the phone the PiP window showed a frozen picture of the live panel. Cause: entering picture in picture pauses the activity, and the generated `WryActivity.onPause` calls `mWebView.onPause()`, so the page stops producing frames. `MainActivity.onPause` now resumes the webview again when `isInPictureInPictureMode`, and pauses it after a dismissal. The stage also goes up the moment PIP is pressed (so the window animates into the video), is rendered through a portal into `<body>`, and comes down if Android has not reported the window within 2.5 s.
+
+**Bindings trap.** `tauri-typegen` turns a literal event name in `app.emit("…")` into a listener function named after it; `"kolpak://pip"` produced `onKolpak://pip`, which broke `tsc` in commit `98515a9`. Emit through a `const` (as `mumble.rs` does); fixed in the next commit.
+
 ## Starting a new Claude session on this
 
 Open the session in a local clone of this repo and say something like:

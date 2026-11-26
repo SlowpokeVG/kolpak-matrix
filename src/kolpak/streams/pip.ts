@@ -9,20 +9,33 @@ import { activeVideo, stopStream } from './sharedPlayer';
 // - Desktop and browsers: the standard API on the <video> (WebView2, CEF and WKWebView have
 //   it; WebKitGTK does not, so there is no button there).
 // - Android: the system WebView has no such API, so the whole app goes into Android's
-//   picture-in-picture window (MainActivity.enterPipNative) and, while it is there, the page
-//   shows only the video (PipStage). Closing the window stops the stream; expanding it brings
-//   the app back as it was.
+//   picture-in-picture window (MainActivity.enterPipNative) and the page shows only the
+//   video (PipStage). The stage goes up the moment PIP is pressed, so the window animates
+//   into the video rather than into the page; it comes down when Android reports the window
+//   expanded or closed, or if Android never entered it. Closing the window stops the stream.
 
-let androidActive = false;
+/** How long to wait for Android to report the window before taking the stage down again. */
+const ENTER_TIMEOUT_MS = 2500;
+
+let stage = false;
+let active = false;
+let enterTimer: number | undefined;
 const listeners = new Set<() => void>();
 let bridge: Promise<unknown> | undefined;
+
+const setStage = (next: boolean): void => {
+  if (stage === next) return;
+  stage = next;
+  listeners.forEach((listener) => listener());
+};
 
 const startBridge = (): void => {
   if (bridge || !isAndroidTauri()) return;
   bridge = listen<{ active: boolean; dismissed: boolean }>('kolpak://pip', (event) => {
-    androidActive = event.payload.active;
+    active = event.payload.active;
+    window.clearTimeout(enterTimer);
+    setStage(active);
     if (event.payload.dismissed) stopStream();
-    listeners.forEach((listener) => listener());
   }).catch(() => undefined);
 };
 
@@ -37,10 +50,18 @@ export async function enterPip(): Promise<void> {
   if (!video) return;
   if (isAndroidTauri()) {
     startBridge();
+    setStage(true);
+    window.clearTimeout(enterTimer);
+    enterTimer = window.setTimeout(() => {
+      if (!active) setStage(false);
+    }, ENTER_TIMEOUT_MS);
     await invoke('kolpak_enter_pip', {
       width: video.videoWidth || 16,
       height: video.videoHeight || 9,
-    }).catch(() => undefined);
+    }).catch(() => {
+      window.clearTimeout(enterTimer);
+      setStage(false);
+    });
     return;
   }
   if (document.pictureInPictureElement === video) {
@@ -58,9 +79,9 @@ const subscribe = (listener: () => void): (() => void) => {
   };
 };
 
-const getActive = (): boolean => androidActive;
+const getStage = (): boolean => stage;
 
-/** Android: whether the app is in the picture-in-picture window right now. */
-export function useAndroidPip(): boolean {
-  return useSyncExternalStore(subscribe, getActive);
+/** Android: whether the page should show only the video (picture in picture). */
+export function useAndroidPipStage(): boolean {
+  return useSyncExternalStore(subscribe, getStage);
 }

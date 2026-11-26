@@ -61,6 +61,10 @@ pub extern "system" fn Java_com_klpq_kolpak_VoiceService_nativeLeaveVoice(
     }
 }
 
+/// A constant, not a literal in the emit call: the bindings generator turns literal event
+/// names into function names, and `kolpak://pip` is not a valid one.
+const EVENT_PIP: &str = "kolpak://pip";
+
 /// Kolpak: the stream's picture-in-picture window opened or closed (`dismissed` when the
 /// user closed it rather than expanding it back).
 #[no_mangle]
@@ -72,7 +76,7 @@ pub extern "system" fn Java_com_klpq_kolpak_MainActivity_nativePipChanged(
 ) {
     if let Some(app) = APP_HANDLE.get() {
         let _ = app.emit(
-            "kolpak://pip",
+            EVENT_PIP,
             serde_json::json!({ "active": active, "dismissed": dismissed }),
         );
     }

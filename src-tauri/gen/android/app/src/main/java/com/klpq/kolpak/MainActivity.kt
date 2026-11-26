@@ -180,8 +180,19 @@ class MainActivity : TauriActivity() {
   override fun onPictureInPictureModeChanged(isInPictureInPictureMode: Boolean, newConfig: Configuration) {
     super.onPictureInPictureModeChanged(isInPictureInPictureMode, newConfig)
     val dismissed = !isInPictureInPictureMode && lifecycle.currentState == Lifecycle.State.CREATED
+    // Closed rather than expanded: the activity is stopped, so let the webview rest as it
+    // would have after an ordinary onPause (see onPause below).
+    if (dismissed) webView?.onPause()
     runCatching { nativePipChanged(isInPictureInPictureMode, dismissed) }
       .onFailure { android.util.Log.w("KolpakPip", "notify failed: ${it.message}") }
+  }
+
+  // Entering picture in picture pauses the activity, and WryActivity.onPause pauses the
+  // webview with it: no more frames, so the floating window would show a frozen picture of
+  // the page. In picture in picture the webview has to keep running; undo that pause.
+  override fun onPause() {
+    super.onPause()
+    if (isInPictureInPictureMode) webView?.onResume()
   }
 
   companion object {
