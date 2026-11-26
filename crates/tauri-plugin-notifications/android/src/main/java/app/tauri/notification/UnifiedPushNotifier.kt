@@ -8,8 +8,6 @@ import android.content.Intent
 import android.media.AudioAttributes
 import android.media.RingtoneManager
 import android.os.Build
-import android.os.Bundle
-import java.util.UUID
 import androidx.core.app.NotificationCompat
 import androidx.core.app.NotificationManagerCompat
 import androidx.core.app.Person
@@ -35,62 +33,120 @@ object UnifiedPushNotifier {
     private const val DEFAULT_RING_LIFETIME_MS = 30_000L
     private const val MAX_RING_LIFETIME_MS = 120_000L
 
+    /** What [showFromPush] did with a push. */
+    enum class Shown {
+        /** Nothing to show (a control message, or the room was read elsewhere). */
+        NONE,
+
+        /** The notification is up and says all it is going to say. */
+        FINAL,
+
+        /** Up, but as "Encrypted message": the webview may be able to say more. */
+        PLACEHOLDER,
+    }
+
     fun showFromPushInBackground(context: Context, rawMessage: String) {
         val app = context.applicationContext
         Thread {
             runCatching { showFromPush(app, rawMessage) }
+                .onSuccess { if (it == Shown.PLACEHOLDER) offerToWebview(rawMessage) }
                 .onFailure { Logger.error(Logger.tags(TAG), "Cold push rendering failed", it as? Exception) }
         }.start()
     }
 
-    fun showFromPush(context: Context, rawMessage: String) {
-        val notification = MatrixPushPayload.parse(rawMessage) ?: return
+    /**
+     * Kolpak: after a placeholder, give the webview a go, if one is listening. It may hold a
+     * room key the native copy does not have yet, and posts under the same id, so the
+     * notification is updated in place without alerting again.
+     */
+    fun offerToWebview(rawMessage: String) {
+        android.os.Handler(android.os.Looper.getMainLooper()).post {
+            runCatching {
+                NotificationPlugin.instance
+                    ?.takeIf { it.canDeliverPushToWebview() }
+                    ?.onUnifiedPushMessage(rawMessage, UnifiedPushStateStore.INSTANCE)
+            }
+        }
+    }
+
+    /**
+     * Kolpak: decrypts first, then posts once, so the pop-up already has the text. The keys
+     * come from the app's native copy of the webview's room keys (src-tauri/src/push_keys.rs),
+     * so this does not wait for the webview, which hardly runs while the app is in the
+     * background. When the key is not in the copy the notification says "Encrypted message"
+     * and the caller can offer the push to the webview ([Shown.PLACEHOLDER]).
+     */
+    fun showFromPush(context: Context, rawMessage: String): Shown {
+        val notification = MatrixPushPayload.parse(rawMessage) ?: return Shown.NONE
         val roomId = notification.optString("room_id")
-        if (roomId.isEmpty()) return
+        if (roomId.isEmpty()) return Shown.NONE
         val userId = notification.optString("user_id")
         val manager = context.getSystemService(NotificationManager::class.java)
         val id = if (userId.isNotEmpty()) roomNotificationId(userId, roomId) else fallbackNotificationId(roomId)
         if (notification.optJSONObject("counts")?.optInt("unread", -1) == 0) {
             manager.cancel(id)
-            return
+            return Shown.NONE
         }
-        val generation = UUID.randomUUID().toString()
         val encrypted = notification.optString("type") == "m.room.encrypted"
         if (!encrypted) {
             if (isRing(notification)) {
                 postIncomingCall(context, notification, notification)
-                return
+                return Shown.FINAL
             }
-            post(context, notification, null, generation)
-            return
+            post(context, notification, null)
+            return Shown.FINAL
         }
-        post(context, notification, "Encrypted message", generation)
 
         val state = UnifiedPushStateStore(context)
         if (!state.showEncryptedContent) {
             PushDiagnostics.record(context, PushOutcome.HIDDEN_BY_SETTING)
-            return
+            post(context, notification, ENCRYPTED_PLACEHOLDER)
+            return Shown.FINAL
         }
-        if (userId.isEmpty() || userId != state.pushUserId) return
-        val (clear, outcome) = decryptedEvent(context, notification)
-        PushDiagnostics.record(context, outcome)
-        if (clear == null || !state.showEncryptedContent) return
+        val clear = if (userId.isNotEmpty() && userId == state.pushUserId) {
+            val (event, outcome) = decryptedEvent(context, notification)
+            PushDiagnostics.record(context, outcome)
+            event
+        } else {
+            null
+        }
+        // The setting may have changed while decrypting.
+        if (clear == null || !state.showEncryptedContent) {
+            post(context, notification, ENCRYPTED_PLACEHOLDER)
+            return if (state.showEncryptedContent) Shown.PLACEHOLDER else Shown.FINAL
+        }
         if (isRing(clear)) {
-            manager.cancel(id)
             postIncomingCall(context, notification, clear)
-            return
+            return Shown.FINAL
         }
-        val body = clear.optJSONObject("content")
-            ?.optString("body")
-            ?.takeIf { it.isNotEmpty() }
-        if (body == null) {
-            PushDiagnostics.record(context, PushOutcome.EMPTY_BODY)
-            return
+        val text = previewText(clear)
+        if (text == null) PushDiagnostics.record(context, PushOutcome.EMPTY_BODY)
+        post(context, notification, text ?: "New message")
+        return Shown.FINAL
+    }
+
+    /** One line for a decrypted event: the message, or what kind of thing was sent. */
+    internal fun previewText(event: JSONObject): String? {
+        val content = event.optJSONObject("content") ?: return null
+        val body = withoutReplyFallback(content.optString("body")).takeIf { it.isNotBlank() }
+        val text = when (content.optString("msgtype")) {
+            "m.image" -> "Image"
+            "m.video" -> "Video"
+            "m.audio" -> if (content.has("org.matrix.msc3245.voice")) "Voice message" else "Audio"
+            "m.file" -> body?.let { "File: $it" } ?: "File"
+            "m.emote" -> body?.let { "* $it" }
+            else -> body
         }
-        val stillCurrent = manager.activeNotifications.any {
-            it.id == id && it.tag == null && it.notification.extras.getString(GENERATION_KEY) == generation
-        }
-        if (stillCurrent) post(context, notification, body, generation, silent = true)
+        return text ?: if (event.optString("type") == "m.sticker") "Sticker" else null
+    }
+
+    /** Older clients start a reply's body with the quoted message ("> <@a:b> text"); drop it. */
+    internal fun withoutReplyFallback(body: String): String {
+        if (!body.startsWith("> ")) return body
+        val lines = body.lines()
+        val rest = lines.dropWhile { it.startsWith(">") }
+        if (rest.size == lines.size || rest.firstOrNull()?.isNotEmpty() == true) return body
+        return rest.drop(1).joinToString("\n").ifBlank { body }
     }
 
     internal fun isRing(event: JSONObject): Boolean {
@@ -99,14 +155,16 @@ object UnifiedPushNotifier {
         return event.optJSONObject("content")?.optString("notification_type") == "ring"
     }
 
-    private const val GENERATION_KEY = "sable.push.generation"
+    private const val ENCRYPTED_PLACEHOLDER = "Encrypted message"
+
+    /** Messages kept in a room's notification, newest last. */
+    private const val MAX_STACKED_MESSAGES = 6
+    private const val EVENT_ID_EXTRA = "kolpak.event_id"
 
     private fun post(
         context: Context,
         notification: JSONObject,
         preview: String?,
-        generation: String,
-        silent: Boolean = false,
     ) {
         val roomId = notification.optString("room_id")
         val eventId = notification.optString("event_id")
@@ -157,37 +215,38 @@ object UnifiedPushNotifier {
 
         val builder = NotificationCompat.Builder(context, channelId)
             .setSmallIcon(iconId)
-            .addExtras(Bundle().apply { putString(GENERATION_KEY, generation) })
             .setContentTitle(title)
             .setContentText(body)
             .setAutoCancel(true)
-            .setOnlyAlertOnce(silent)
             .setPriority(NotificationCompat.PRIORITY_HIGH)
             .setGroup(GROUP_KEY)
             .setContentIntent(
                 PendingIntent.getActivity(context, notifId, intent, flags)
             )
 
-        if (silent) builder.setSilent(true)
-
         // Same style as the warm path, so JS enrichment updates it in place.
         if (isInvite) {
             builder.setStyle(NotificationCompat.BigTextStyle().bigText(body))
         } else {
-            builder.setStyle(
-                NotificationCompat.MessagingStyle(
-                    Person.Builder().setName(SELF_PERSON_NAME).build()
-                ).also { style ->
-                    if (roomName.isNotEmpty()) {
-                        style.conversationTitle = roomName
-                        style.isGroupConversation = true
-                    }
-                }.addMessage(
-                    text.orEmpty(),
-                    System.currentTimeMillis(),
-                    sender.takeIf { it.isNotEmpty() }?.let { Person.Builder().setName(it).build() }
+            // Kolpak: a new message in a room joins the ones already in its notification, as
+            // in other messengers, instead of replacing them.
+            val style = stackedStyle(context, notifId, roomName)
+            val repeat = eventId.isNotEmpty() &&
+                style.messages.any { it.extras.getString(EVENT_ID_EXTRA) == eventId }
+            // The same push again (a redelivery) must not ring twice.
+            if (repeat) {
+                builder.setOnlyAlertOnce(true)
+            } else {
+                style.addMessage(
+                    NotificationCompat.MessagingStyle.Message(
+                        text.orEmpty(),
+                        System.currentTimeMillis(),
+                        sender.takeIf { it.isNotEmpty() }?.let { Person.Builder().setName(it).build() }
+                    ).also { it.extras.putString(EVENT_ID_EXTRA, eventId) }
                 )
-            )
+            }
+            while (style.messages.size > MAX_STACKED_MESSAGES) style.messages.removeAt(0)
+            builder.setStyle(style)
         }
 
         if (!isInvite) {
@@ -195,6 +254,22 @@ object UnifiedPushNotifier {
         }
 
         NotificationManagerCompat.from(context).notify(notifId, builder.build())
+    }
+
+    private fun stackedStyle(context: Context, notifId: Int, roomName: String): NotificationCompat.MessagingStyle {
+        val existing = runCatching {
+            context.getSystemService(NotificationManager::class.java)
+                ?.activeNotifications
+                ?.firstOrNull { it.id == notifId && it.tag == null }
+                ?.let { NotificationCompat.MessagingStyle.extractMessagingStyleFromNotification(it.notification) }
+        }.getOrNull()
+        return (existing ?: NotificationCompat.MessagingStyle(Person.Builder().setName(SELF_PERSON_NAME).build()))
+            .also { style ->
+                if (roomName.isNotEmpty()) {
+                    style.conversationTitle = roomName
+                    style.isGroupConversation = true
+                }
+            }
     }
 
     private fun postIncomingCall(context: Context, notification: JSONObject, event: JSONObject) {
@@ -356,13 +431,10 @@ object UnifiedPushNotifier {
     private fun messageText(context: Context, notification: JSONObject): String {
         if (notification.optString("type") != "m.room.encrypted") {
             PushDiagnostics.record(context, PushOutcome.PLAINTEXT)
-            return notification.optJSONObject("content")
-                ?.optString("body")
-                ?.takeIf { it.isNotEmpty() }
-                ?: "New message"
+            return previewText(notification) ?: "New message"
         }
 
-        return "Encrypted message"
+        return ENCRYPTED_PLACEHOLDER
     }
 
     private fun decryptedEvent(

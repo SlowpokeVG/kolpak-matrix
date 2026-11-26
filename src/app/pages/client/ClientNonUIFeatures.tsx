@@ -1,6 +1,7 @@
 import type { ReactNode } from 'react';
 import { IconSizesProvider } from '$components/icons/phosphor';
 import { ShareTargetFeature } from '$features/share-target/ShareTargetFeature';
+import { PushKeyMirror } from '../../../kolpak/notifications/PushKeyMirror';
 import { useIncomingCallSignaling } from '$features/call/useCallSignaling';
 import { MatrixRTCSessionProvider } from '$hooks/useMatrixRTCSession';
 import { BackgroundNotifications } from './BackgroundNotifications';
@@ -67,6 +68,7 @@ export function ClientNonUIFeatures({ children }: ClientNonUIFeaturesProps) {
       <SentryTagsFeature />
       <HealthMonitor />
       <ShareTargetFeature />
+      <PushKeyMirror />
       <IconSizesProvider>{children}</IconSizesProvider>
     </MatrixRTCSessionProvider>
   );

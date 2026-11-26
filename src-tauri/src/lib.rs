@@ -14,6 +14,8 @@ mod mobile_diagnostics;
 #[cfg(any(desktop, target_os = "android"))]
 mod mumble;
 mod network;
+#[cfg(all(any(target_os = "android", test), feature = "matrix-crypto"))]
+mod push_keys;
 mod sentry;
 mod share_inbox;
 
@@ -530,6 +532,10 @@ pub fn run() {
             mobile::kolpak_enter_pip,
             #[cfg(target_os = "android")]
             mobile::kolpak_open_background_connection_settings,
+            #[cfg(all(target_os = "android", feature = "matrix-crypto"))]
+            push_keys::kolpak_push_keys_import,
+            #[cfg(all(target_os = "android", feature = "matrix-crypto"))]
+            push_keys::kolpak_push_keys_wipe,
             #[cfg(target_os = "ios")]
             ios::haptic_feedback,
             #[cfg(target_os = "ios")]

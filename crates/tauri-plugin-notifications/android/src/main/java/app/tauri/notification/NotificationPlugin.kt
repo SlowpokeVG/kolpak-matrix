@@ -13,6 +13,8 @@ import android.os.Looper
 import android.os.PowerManager
 import android.provider.Settings
 import android.webkit.WebView
+import androidx.lifecycle.Lifecycle
+import androidx.lifecycle.LifecycleOwner
 import app.tauri.PermissionState
 import app.tauri.annotation.Command
 import app.tauri.annotation.InvokeArg
@@ -882,6 +884,13 @@ class NotificationPlugin(private val activity: Activity): Plugin(activity) {
    */
   fun canDeliverPushToWebview(): Boolean =
     hasPushMessageListener && !activity.isFinishing && !activity.isDestroyed
+
+  /**
+   * Kolpak: the app is on screen (picture in picture included), so its webview runs at full
+   * speed. In the background it barely runs, and the native push path posts instead.
+   */
+  fun isAppOnScreen(): Boolean =
+    (activity as? LifecycleOwner)?.lifecycle?.currentState?.isAtLeast(Lifecycle.State.STARTED) == true
 
   fun onUnifiedPushMessage(content: String, instance: String): Boolean {
     if (instance != unifiedPushState.activeInstance) return false

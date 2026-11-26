@@ -501,6 +501,20 @@ Fix: the plugin is now vendored as `crates/tauri-plugin-notifications` (Sable's 
 
 Also fixed in passing: `crates/kolpak-mumble/Cargo.toml` failed `fmt:check` (a long line from the Android commit), and `knip` flagged `scripts/icons/render-android-icons.mjs` as unused; it is now `pnpm generate:android-icons` and imports `@playwright/test` (set `CHROMIUM_PATH` to use another Chromium). Still flagged by `knip` and not ours: five `.github/scripts/*.mjs` left from Sable's removed release workflows.
 
+### 2026-11-26 — notifications decrypted natively, without waiting for the webview
+
+The owner, on the build with webview-first pushes: "Encrypted message" still pops up, and notifications come late, but only while the app is in the background. Both had one cause: in the background Android hardly runs the webview, so a push handed to it waits, and the quick decrypt (1.5 s) runs out and posts the placeholder.
+
+**The fix: decrypt in native code.** The room keys live in the webview's crypto store (wasm, IndexedDB), which nothing native can read, so the webview now keeps a copy of them for the push path:
+
+- `src/kolpak/notifications/pushKeyMirror.ts` (mounted by `PushKeyMirror` in `ClientNonUIFeatures`, Android only) exports `exportRoomKeysAsJson()` into the command `kolpak_push_keys_import` 20 s after start, each time the app goes to the background (at most every 30 s), 4 s after new room keys arrive by to-device (`m.room_key`, `m.forwarded_room_key`, `m.room_key_bundle`), and every 10 min. Logout removes the copy (`kolpak_push_keys_wipe`, from `wipeNativeCryptoStore` in `initMatrix.ts`).
+- `src-tauri/src/push_keys.rs` keeps the copy in its own SQLite crypto store at `<app data>/kolpak-push-keys/<account>/` — deliberately not under `matrix-crypto/`, because the app refuses to start the webview's crypto while a native engine store exists there. It holds Megolm room keys only (no identity or cross-signing secrets), is never uploaded or used to send, and is not passphrase-protected (app-private storage, like the webview's own store). It exports `Java_app_tauri_notification_PushPayloadDecryptor_nativeDecryptPush`, the JNI symbol the plugin was already looking for; it decrypts with `TrustRequirement::Untrusted`, since the copy knows no devices. A Rust test (`decrypts_a_push_with_the_copied_keys`, runs on desktop) goes through the whole trip: Alice encrypts, the keys are exported and copied, and the push event built the way `UnifiedPushNotifier` builds it decrypts, also from a freshly opened store.
+- The vendored plugin (`crates/tauri-plugin-notifications`, see its `KOLPAK.md`): `showFromPush` decrypts first and posts once with the text; only when the key is missing does it post "Encrypted message" and offer the push to the webview, which updates it in place without a second sound. While the app is on screen the webview takes pushes as before. A room's notification now stacks its last six messages instead of replacing them.
+
+What still shows "Encrypted message": a message in a Megolm session that reached the phone while the app was in the background (new session after 100 messages or a week, or someone new in the room), until the app is opened once. Fixing that would need the native side to receive to-device keys itself (a native sync), which is a much bigger piece.
+
+Checks: Rust test above, `cargo check` for aarch64-linux-android clean, the plugin's 206 Robolectric tests pass (`UnifiedPushNotifierTest` and `EmbeddedPushServiceTest` updated for the new order), `tsc`, `oxlint` (also fixed a leftover `console.log` in `scripts/icons/render-android-icons.mjs`), `oxfmt`, and vitest for the notification code (new `pushKeyMirror.test.ts`).
+
 ## Starting a new Claude session on this
 
 Open the session in a local clone of this repo and say something like:

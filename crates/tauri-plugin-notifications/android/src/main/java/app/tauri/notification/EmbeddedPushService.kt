@@ -203,36 +203,41 @@ class EmbeddedPushService : Service() {
             PushDiagnostics.record(this, PushOutcome.EMBEDDED_DECRYPTED)
             val payload = MatrixPushPayload.parse(body)
             val activation = payload?.optString("ack_token")?.isNotEmpty() == true
-            // Kolpak: the webview first, when it is listening. It holds the room keys and
-            // posts the notification with the text; the native path here can only post
-            // "Encrypted message", and doing that first made every pop-up say so. Native
-            // rendering is the fallback for when no webview takes the push.
+            // Kolpak: while the app is on screen the webview takes the push (it runs at full
+            // speed and knows which room is open). Otherwise the native path decrypts with the
+            // app's copy of the room keys and posts the text at once; the webview is offered
+            // the push only when that left "Encrypted message". Activation pushes always go to
+            // the webview, which finishes the registration with them.
             handler.post {
                 if (!owns(owner)) {
                     inFlight.remove(key)
                     return@post
                 }
-                val dispatched = try {
-                    NotificationPlugin.instance?.let {
-                        it.canDeliverPushToWebview() &&
-                            it.onUnifiedPushMessage(body, UnifiedPushStateStore.INSTANCE)
-                    } == true
+                val plugin = NotificationPlugin.instance
+                val toWebview = try {
+                    plugin != null && plugin.canDeliverPushToWebview() &&
+                        (activation || plugin.isAppOnScreen()) &&
+                        plugin.onUnifiedPushMessage(body, UnifiedPushStateStore.INSTANCE)
                 } catch (_: Exception) {
                     false
                 }
+                if (activation && !toWebview) {
+                    // Kept for a replay once the webview listens.
+                    inFlight.remove(key)
+                    return@post
+                }
                 pushExecutor.execute {
-                    if (!dispatched) {
-                        try {
+                    if (!toWebview) {
+                        val shown = try {
                             UnifiedPushNotifier.showFromPush(this, body)
                         } catch (_: Exception) {
                             Log.w(TAG, "Could not display the push notification")
                             handler.post { inFlight.remove(key) }
                             return@execute
                         }
-                    }
-                    if (activation && !dispatched) {
-                        handler.post { inFlight.remove(key) }
-                        return@execute
+                        if (shown == UnifiedPushNotifier.Shown.PLACEHOLDER) {
+                            UnifiedPushNotifier.offerToWebview(body)
+                        }
                     }
                     if (owns(owner) && !state.completeEmbeddedPush(owner.endpoint, id)) {
                         Log.w(TAG, "Could not persist push completion")

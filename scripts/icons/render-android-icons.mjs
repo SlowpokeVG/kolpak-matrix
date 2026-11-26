@@ -67,4 +67,4 @@ for (const [name, scale] of Object.entries(densities)) {
 }
 
 await browser.close();
-console.log(`Android icons written to ${path.relative(root, out)}`);
+process.stdout.write(`Android icons written to ${path.relative(root, out)}\n`);

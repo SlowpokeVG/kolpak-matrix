@@ -182,31 +182,85 @@ class UnifiedPushNotifierTest {
         assertTrue(source.contains("event"))
     }
 
-    @Test
-    fun showFromPush_postsBaselineBeforeNativeDecryption() {
+    private fun encryptedPayload(roomId: String, eventId: String): String {
+        val payload = JSONObject(pushPayload(roomId, eventId))
+        payload.getJSONObject("notification").put("type", "m.room.encrypted")
+        return payload.toString()
+    }
+
+    private fun enablePushAccount() {
         val state = UnifiedPushStateStore(context)
         state.pushUserId = "@alice:example.org"
         state.pushDeviceId = "DEVICE"
         state.showEncryptedContent = true
-        var baselineWasVisible = false
+    }
+
+    private fun postedText(roomId: String): String? =
+        shadowNotificationManager().getNotification(null, canonicalId(roomId))
+            ?.extras?.getString(Notification.EXTRA_TEXT)
+
+    @Test
+    fun showFromPush_decryptsBeforePosting() {
+        enablePushAccount()
+        var postedDuringDecryption = true
         mockkObject(PushPayloadDecryptor)
         try {
             every { PushPayloadDecryptor.decrypt(any(), any(), any(), any(), any()) } answers {
-                baselineWasVisible = shadowNotificationManager().getNotification(null, canonicalId("!enc:example.org")) != null
-                PushDecryptResult.Success("""{"content":{"body":"decrypted"}}""")
+                postedDuringDecryption = shadowNotificationManager().getNotification(null, canonicalId("!enc:example.org")) != null
+                PushDecryptResult.Success("""{"type":"m.room.message","content":{"msgtype":"m.text","body":"decrypted"}}""")
             }
-            val payload = JSONObject(pushPayload("!enc:example.org", "\$enc"))
-            payload.getJSONObject("notification").put("type", "m.room.encrypted")
-            UnifiedPushNotifier.showFromPush(context, payload.toString())
-            assertTrue("a slow native decrypt must not delay notification delivery", baselineWasVisible)
+            val shown = UnifiedPushNotifier.showFromPush(context, encryptedPayload("!enc:example.org", "\$enc"))
+            assertEquals(UnifiedPushNotifier.Shown.FINAL, shown)
+            assertFalse("the pop-up must not say \"Encrypted message\" first", postedDuringDecryption)
             val posted = shadowNotificationManager().getNotification(null, canonicalId("!enc:example.org"))!!
             assertTrue(posted.extras.getString(Notification.EXTRA_TEXT)!!.contains("decrypted"))
             assertEquals("Room 1", posted.extras.getCharSequence(Notification.EXTRA_CONVERSATION_TITLE))
-            // The repost must not alert again.
-            assertTrue(posted.flags and Notification.FLAG_ONLY_ALERT_ONCE != 0)
+            // Posted once, so it alerts.
+            assertEquals(0, posted.flags and Notification.FLAG_ONLY_ALERT_ONCE)
         } finally {
             unmockkObject(PushPayloadDecryptor)
         }
+    }
+
+    @Test
+    fun showFromPush_placeholderWhenTheKeyIsMissing() {
+        enablePushAccount()
+        mockkObject(PushPayloadDecryptor)
+        try {
+            every { PushPayloadDecryptor.decrypt(any(), any(), any(), any(), any()) } returns
+                PushDecryptResult.Failure(PushOutcome.DECRYPT_FAILED)
+            val shown = UnifiedPushNotifier.showFromPush(context, encryptedPayload("!enc:example.org", "\$enc"))
+            assertEquals(UnifiedPushNotifier.Shown.PLACEHOLDER, shown)
+            assertTrue(postedText("!enc:example.org")!!.contains("Encrypted message"))
+        } finally {
+            unmockkObject(PushPayloadDecryptor)
+        }
+    }
+
+    @Test
+    fun showFromPush_stacksTheMessagesOfARoomOnce() {
+        UnifiedPushNotifier.showFromPush(context, pushPayload("!stack:example.org", "\$one", "first"))
+        UnifiedPushNotifier.showFromPush(context, pushPayload("!stack:example.org", "\$two", "second"))
+        // A redelivery adds nothing and does not alert again.
+        UnifiedPushNotifier.showFromPush(context, pushPayload("!stack:example.org", "\$two", "second"))
+        val posted = shadowNotificationManager().getNotification(null, canonicalId("!stack:example.org"))!!
+        val messages = posted.extras.getParcelableArray(Notification.EXTRA_MESSAGES)!!
+        assertEquals(2, messages.size)
+        assertTrue(posted.flags and Notification.FLAG_ONLY_ALERT_ONCE != 0)
+    }
+
+    @Test
+    fun previewText_namesWhatWasSent() {
+        fun event(content: String, type: String = "m.room.message") =
+            JSONObject("""{"type":"$type","content":$content}""")
+        assertEquals("hi", UnifiedPushNotifier.previewText(event("""{"msgtype":"m.text","body":"hi"}""")))
+        assertEquals("Image", UnifiedPushNotifier.previewText(event("""{"msgtype":"m.image","body":"IMG_1.jpg"}""")))
+        assertEquals("Voice message", UnifiedPushNotifier.previewText(event("""{"msgtype":"m.audio","body":"a.ogg","org.matrix.msc3245.voice":{}}""")))
+        assertEquals("* waves", UnifiedPushNotifier.previewText(event("""{"msgtype":"m.emote","body":"waves"}""")))
+        assertEquals("Sticker", UnifiedPushNotifier.previewText(event("""{}""", "m.sticker")))
+        assertNull(UnifiedPushNotifier.previewText(event("""{}""")))
+        assertEquals("ok", UnifiedPushNotifier.previewText(event("""{"msgtype":"m.text","body":"> <@a:b> hi\n> there\n\nok"}""")))
+        assertEquals("> just a quote", UnifiedPushNotifier.withoutReplyFallback("> just a quote"))
     }
 
     @Test
@@ -256,31 +310,6 @@ class UnifiedPushNotifierTest {
         UnifiedPushNotifier.showFromPush(context, pushPayload("!read:example.org", "\$read"))
         UnifiedPushNotifier.showFromPush(context, """{"notification":{"user_id":"@alice:example.org","room_id":"!read:example.org","counts":{"unread":0}}}""")
         assertTrue(shadowNotificationManager().allNotifications.isEmpty())
-    }
-
-    @Test
-    fun showFromPush_lateDecryptionDoesNotResurrectDismissedOrSupersededAlerts() {
-        val state = UnifiedPushStateStore(context)
-        state.pushUserId = "@alice:example.org"
-        state.pushDeviceId = "DEVICE"
-        state.showEncryptedContent = true
-        mockkObject(PushPayloadDecryptor)
-        try {
-            for (supersede in listOf(false, true)) {
-                every { PushPayloadDecryptor.decrypt(any(), any(), any(), any(), any()) } answers {
-                    notificationManager.cancel(canonicalId("!enc:example.org"))
-                    if (supersede) UnifiedPushNotifier.showFromPush(context,
-                        pushPayload("!enc:example.org", "\$new", "newer message"))
-                    PushDecryptResult.Success("""{"content":{"body":"stale plaintext"}}""")
-                }
-                val payload = JSONObject(pushPayload("!enc:example.org", "\$old"))
-                payload.getJSONObject("notification").put("type", "m.room.encrypted")
-                UnifiedPushNotifier.showFromPush(context, payload.toString())
-                val posted = shadowNotificationManager().getNotification(null, canonicalId("!enc:example.org"))
-                if (supersede) assertTrue(posted!!.extras.getString(Notification.EXTRA_TEXT)!!.contains("newer message"))
-                else assertNull(posted)
-            }
-        } finally { unmockkObject(PushPayloadDecryptor) }
     }
 
     @Test

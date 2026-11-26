@@ -29,7 +29,8 @@ import {
 import { getLocalStorageItem } from '$state/utils/atomWithLocalStorage';
 import { createLogger } from '$utils/debug';
 import { createDebugLogger } from '$utils/debugLogger';
-import { isMobileTauri } from '$utils/platform';
+import { isAndroidTauri, isMobileTauri } from '$utils/platform';
+import { wipePushKeys } from '../kolpak/notifications/pushKeyMirror';
 import * as Sentry from '@sentry/react';
 import { pushSessionToSW } from '../sw-session';
 import { assertAuthMetadataIssuer, createSessionTokenRefresher } from './oidcTokenRefresher';
@@ -373,6 +374,12 @@ const wipeNativeCryptoStore = async (session: Session): Promise<void> => {
     await engineWipe({ userId: session.userId, deviceId: session.deviceId });
   } catch (error) {
     log.warn('wipeNativeCryptoStore failed', session.userId, error);
+  }
+  // Kolpak: the push path's copy of the room keys (src/kolpak/notifications/pushKeyMirror.ts).
+  if (isAndroidTauri()) {
+    await wipePushKeys(session.userId, session.deviceId).catch((error: unknown) =>
+      log.warn('wipePushKeys failed', session.userId, error)
+    );
   }
 };
 

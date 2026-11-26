@@ -55,6 +55,9 @@ class EmbeddedPushServiceTest {
         state.prepareEmbeddedReplay(endpoint, true)
         plugin = mockk(relaxed = true)
         every { plugin.onUnifiedPushMessage(any(), any()) } returns true
+        // Kolpak: the app is on screen unless a test says otherwise, so pushes go to the webview.
+        every { plugin.canDeliverPushToWebview() } returns true
+        every { plugin.isAppOnScreen() } returns true
         NotificationPlugin.instance = plugin
         PushDiagnostics.drain(service)
         val client = mockk<OkHttpClient>(relaxed = true)
@@ -137,8 +140,16 @@ class EmbeddedPushServiceTest {
 
     @Test
     fun decryptsMatrixPushAndRendersAndroidNotification() {
-        val body = deliverMatrixPush()
+        // Kolpak: in the background the native path posts and the webview is left alone.
+        every { plugin.isAppOnScreen() } returns false
+        deliverMatrixPush()
         assertRenderedMatrixNotification()
+        verify(exactly = 0) { plugin.onUnifiedPushMessage(any(), any()) }
+    }
+
+    @Test
+    fun onScreenTheWebviewTakesTheMatrixPush() {
+        val body = deliverMatrixPush()
         verify(exactly = 1) { plugin.onUnifiedPushMessage(body, UnifiedPushStateStore.INSTANCE) }
     }
 
@@ -203,6 +214,14 @@ class EmbeddedPushServiceTest {
         put("id", id)
         put("time", 200)
         put("message", """{"app_id":"app","ack_token":"$id"}""")
+    }.toString()
+
+    /** A Matrix notification, not an activation. */
+    private fun matrixMessage(id: String): String = org.json.JSONObject().apply {
+        put("event", "message")
+        put("id", id)
+        put("time", 200)
+        put("message", """{"notification":{"room_id":"!room:example.org","event_id":"${'$'}$id"}}""")
     }.toString()
 
     @Test
@@ -421,34 +440,48 @@ class EmbeddedPushServiceTest {
     }
 
     @Test
-    fun destructionBeforeJsDispatchDoesNotCompleteMessage() {
+    fun inTheBackgroundThePushIsRenderedNativelyAndCompleted() {
+        every { plugin.isAppOnScreen() } returns false
         start()
         frame(0, """{"event":"open","time":100}""")
-        val executor = EmbeddedPushService::class.java.getDeclaredField("pushExecutor").run {
-            isAccessible = true
-            get(service) as ExecutorService
-        }
-        val rendering = CountDownLatch(1)
-        val release = CountDownLatch(1)
         mockkObject(UnifiedPushNotifier)
-        every { UnifiedPushNotifier.showFromPush(any(), any()) } answers {
-            rendering.countDown()
-            release.await(5, TimeUnit.SECONDS)
-            Unit
-        }
+        every { UnifiedPushNotifier.showFromPush(any(), any()) } returns UnifiedPushNotifier.Shown.FINAL
         try {
-            val (socket, listener) = connections[0]
-            listener.onMessage(socket, message("A"))
-            shadowOf(Looper.getMainLooper()).idle()
-            org.junit.Assert.assertTrue(rendering.await(5, TimeUnit.SECONDS))
-            release.countDown()
-            executor.submit {}.get(5, TimeUnit.SECONDS)
-            service.onDestroy()
-            shadowOf(Looper.getMainLooper()).idle()
+            frame(0, matrixMessage("A"))
+            verify(exactly = 1) { UnifiedPushNotifier.showFromPush(any(), any()) }
             verify(exactly = 0) { plugin.onUnifiedPushMessage(any(), any()) }
-            assertEquals(true, state.shouldProcessEmbeddedPush(endpoint, "A", 200))
+            assertEquals(false, state.shouldProcessEmbeddedPush(endpoint, "A", 200))
         } finally {
-            release.countDown()
+            unmockkObject(UnifiedPushNotifier)
+        }
+    }
+
+    @Test
+    fun inTheBackgroundAPlaceholderIsOfferedToTheWebview() {
+        every { plugin.isAppOnScreen() } returns false
+        start()
+        frame(0, """{"event":"open","time":100}""")
+        mockkObject(UnifiedPushNotifier)
+        every { UnifiedPushNotifier.showFromPush(any(), any()) } returns UnifiedPushNotifier.Shown.PLACEHOLDER
+        try {
+            frame(0, matrixMessage("A"))
+            shadowOf(Looper.getMainLooper()).idle()
+            verify(exactly = 1) { plugin.onUnifiedPushMessage(any(), UnifiedPushStateStore.INSTANCE) }
+        } finally {
+            unmockkObject(UnifiedPushNotifier)
+        }
+    }
+
+    @Test
+    fun onScreenThePushGoesToTheWebviewOnly() {
+        start()
+        frame(0, """{"event":"open","time":100}""")
+        mockkObject(UnifiedPushNotifier)
+        try {
+            frame(0, matrixMessage("A"))
+            verify(exactly = 0) { UnifiedPushNotifier.showFromPush(any(), any()) }
+            verify(exactly = 1) { plugin.onUnifiedPushMessage(any(), UnifiedPushStateStore.INSTANCE) }
+        } finally {
             unmockkObject(UnifiedPushNotifier)
         }
     }

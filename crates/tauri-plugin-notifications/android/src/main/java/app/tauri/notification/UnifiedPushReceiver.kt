@@ -49,11 +49,13 @@ class UnifiedPushReceiver : PushService() {
         // than showing a duplicate. If no JS push-message listener is attached,
         // NotificationPlugin.onUnifiedPushMessage drops the event and the native
         // post stands alone.
-        // Kolpak: the webview first, when it is listening; it can decrypt and posts the
-        // notification with the text. Native rendering (which can only say "Encrypted
-        // message" in this app) is the fallback. See EmbeddedPushService.processMessage.
+        // Kolpak: the webview while the app is on screen; otherwise the native path, which
+        // decrypts with the app's copy of the room keys and offers the push to the webview
+        // only when it could not. See EmbeddedPushService.processMessage.
         val plugin = NotificationPlugin.instance
-        if (plugin?.canDeliverPushToWebview() == true && plugin.onUnifiedPushMessage(content, instance)) {
+        if (plugin != null && plugin.canDeliverPushToWebview() && plugin.isAppOnScreen() &&
+            plugin.onUnifiedPushMessage(content, instance)
+        ) {
             return
         }
         if (!PushWorkForegroundService.render(this, content)) {

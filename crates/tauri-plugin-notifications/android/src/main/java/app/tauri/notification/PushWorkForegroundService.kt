@@ -61,6 +61,7 @@ class PushWorkForegroundService : Service() {
         val context = applicationContext
         Thread {
             runCatching { UnifiedPushNotifier.showFromPush(context, payload) }
+                .onSuccess { if (it == UnifiedPushNotifier.Shown.PLACEHOLDER) UnifiedPushNotifier.offerToWebview(payload) }
                 .onFailure { Logger.error(Logger.tags(TAG), "Cold push rendering failed", it as? Exception) }
             if (inForeground) stopSelf(startId)
         }.start()
