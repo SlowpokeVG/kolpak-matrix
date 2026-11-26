@@ -6,13 +6,18 @@
 
 use std::sync::OnceLock;
 
-use jni::objects::{JObject, JValue};
+use jni::objects::{JClass, JObject, JValue};
+use jni::refs::Global;
 use jni::strings::JNIString;
 use jni::{jni_sig, jni_str, EnvUnowned, JavaVM};
 use tauri::{AppHandle, Emitter};
 
 static JAVA_VM: OnceLock<JavaVM> = OnceLock::new();
 static APP_HANDLE: OnceLock<AppHandle> = OnceLock::new();
+/// MainActivity's class, looked up on the Java thread that creates the activity. `FindClass`
+/// from a native thread (a Tokio worker running an async command, say) only sees system
+/// classes on Android, so calls that may come from such a thread go through this. Kolpak.
+static ACTIVITY_CLASS: OnceLock<Global<JClass<'static>>> = OnceLock::new();
 
 pub fn set_app_handle(app: AppHandle) {
     let _ = APP_HANDLE.set(app);
@@ -20,24 +25,39 @@ pub fn set_app_handle(app: AppHandle) {
 
 // Called by MainActivity.onCreate to cache the JavaVM for later callbacks.
 #[no_mangle]
-pub extern "system" fn Java_moe_sable_client_MainActivity_nativeInitStatusBar(
+pub extern "system" fn Java_com_klpq_kolpak_MainActivity_nativeInitStatusBar(
     mut env: EnvUnowned,
-    _this: JObject,
+    this: JObject,
 ) {
     let _ = env.with_env(|env| {
         let vm = env.get_java_vm()?;
         let _ = JAVA_VM.set(vm);
+        if ACTIVITY_CLASS.get().is_none() {
+            let class = env.get_object_class(&this)?;
+            let _ = ACTIVITY_CLASS.set(env.new_global_ref(&class)?);
+        }
         Ok::<_, jni::errors::Error>(())
     });
 }
 
 #[no_mangle]
-pub extern "system" fn Java_moe_sable_client_MainActivity_nativeShareReceived(
+pub extern "system" fn Java_com_klpq_kolpak_MainActivity_nativeShareReceived(
     _env: EnvUnowned,
     _this: JObject,
 ) {
     if let Some(app) = APP_HANDLE.get() {
         let _ = app.emit("share-received", ());
+    }
+}
+
+/// Kolpak: the Leave button on the voice notification, or the app swiped away while in voice.
+#[no_mangle]
+pub extern "system" fn Java_com_klpq_kolpak_VoiceService_nativeLeaveVoice(
+    _env: EnvUnowned,
+    _this: JObject,
+) {
+    if let Some(app) = APP_HANDLE.get() {
+        crate::mumble::leave_voice(app.clone());
     }
 }
 
@@ -64,7 +84,7 @@ pub fn set_immersive_mode(enabled: bool) -> Result<(), String> {
     let vm = JAVA_VM.get().ok_or("java vm not initialized")?;
     vm.attach_current_thread(|env| {
         let result = env.call_static_method(
-            jni_str!("moe/sable/client/MainActivity"),
+            jni_str!("com/klpq/kolpak/MainActivity"),
             jni_str!("setImmersiveModeNative"),
             jni_sig!("(Z)V"),
             &[JValue::Bool(enabled)],
@@ -97,7 +117,7 @@ pub(crate) fn play_notification_sound(kind: String) -> Result<(), String> {
     let vm = JAVA_VM.get().ok_or("java vm not initialized")?;
     vm.attach_current_thread(|env| {
         let result = env.call_static_method(
-            jni_str!("moe/sable/client/MainActivity"),
+            jni_str!("com/klpq/kolpak/MainActivity"),
             jni_str!("playNotificationSoundNative"),
             jni_sig!("(I)V"),
             &[JValue::Int(code)],
@@ -114,7 +134,7 @@ fn call_bar_color(method: &str, color: u32) -> Result<(), String> {
     let vm = JAVA_VM.get().ok_or("java vm not initialized")?;
     vm.attach_current_thread(|env| {
         let result = env.call_static_method(
-            jni_str!("moe/sable/client/MainActivity"),
+            jni_str!("com/klpq/kolpak/MainActivity"),
             JNIString::new(method),
             jni_sig!("(I)V"),
             &[JValue::Int(color as i32)],
@@ -131,11 +151,47 @@ fn call_static_method(method: &str) -> Result<(), String> {
     let vm = JAVA_VM.get().ok_or("java vm not initialized")?;
     vm.attach_current_thread(|env| {
         let result = env.call_static_method(
-            jni_str!("moe/sable/client/MainActivity"),
+            jni_str!("com/klpq/kolpak/MainActivity"),
             JNIString::new(method),
             jni_sig!("()V"),
             &[],
         );
+        if result.is_err() {
+            let _ = env.exception_clear();
+        }
+        result.map(|_| ())
+    })
+    .map_err(|e| e.to_string())
+}
+
+/// Kolpak: the Mumble voice session. Starts the voice foreground service (keeps the
+/// connection and audio alive with the screen off, shows the "in voice" notification) and,
+/// in call mode, puts the audio system in communication mode with the route picked for
+/// voice. Calling it again switches the mode. Safe from any thread.
+pub(crate) fn start_voice_session(call_mode: bool) -> Result<(), String> {
+    call_activity_static(
+        "startVoiceSessionNative",
+        jni_sig!("(Z)V"),
+        &[JValue::Bool(call_mode)],
+    )
+}
+
+/// Kolpak: ends the voice session: the service stops and the audio mode goes back to normal.
+pub(crate) fn stop_voice_session() -> Result<(), String> {
+    call_activity_static("stopVoiceSessionNative", jni_sig!("()V"), &[])
+}
+
+fn call_activity_static(
+    method: &str,
+    sig: jni::signature::MethodSignature<'static, 'static>,
+    args: &[JValue],
+) -> Result<(), String> {
+    let vm = JAVA_VM.get().ok_or("java vm not initialized")?;
+    let class = ACTIVITY_CLASS
+        .get()
+        .ok_or("activity class not initialized")?;
+    vm.attach_current_thread(|env| {
+        let result = env.call_static_method(class, JNIString::new(method), &sig, args);
         if result.is_err() {
             let _ = env.exception_clear();
         }

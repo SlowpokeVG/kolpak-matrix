@@ -1,4 +1,5 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
-  <color name="ic_launcher_background">#1A1C28</color>
+  <!-- Kolpak paper (DESIGN.md §2.3): the launcher tile behind the Guy. -->
+  <color name="ic_launcher_background">#EDEBE4</color>
 </resources>

@@ -11,8 +11,11 @@ use std::sync::{mpsc as std_mpsc, Arc, Mutex};
 use std::thread::JoinHandle;
 use std::time::{Duration, Instant};
 
+#[cfg(not(target_os = "android"))]
 use cpal::traits::{DeviceTrait, HostTrait, StreamTrait};
-use cpal::{FromSample, SampleFormat, SizedSample};
+#[cfg(not(target_os = "android"))]
+use cpal::SampleFormat;
+use cpal::{FromSample, SizedSample};
 use unsafe_libopus::{opus_decode_float, opus_decoder_create, opus_decoder_destroy, OpusDecoder};
 
 use crate::audio::{AudioError, InputDevice, Resampler, SAMPLE_RATE};
@@ -32,6 +35,21 @@ const TALKING_TIMEOUT: Duration = Duration::from_millis(350);
 pub type OutputDevice = InputDevice;
 
 pub fn list_output_devices() -> Result<Vec<OutputDevice>, AudioError> {
+    // See list_input_devices: on Android the system routes voice.
+    #[cfg(target_os = "android")]
+    {
+        Ok(vec![OutputDevice {
+            id: String::new(),
+            name: "Phone speaker or headset".into(),
+            is_default: true,
+        }])
+    }
+    #[cfg(not(target_os = "android"))]
+    list_cpal_output_devices()
+}
+
+#[cfg(not(target_os = "android"))]
+fn list_cpal_output_devices() -> Result<Vec<OutputDevice>, AudioError> {
     let host = cpal::default_host();
     let default_id = host
         .default_output_device()
@@ -336,6 +354,17 @@ impl Playback {
         let (ready_tx, ready_rx) = std_mpsc::channel::<Result<PlaybackInfo, AudioError>>();
         let thread_stop = stop.clone();
 
+        // On Android the stream is AAudio's, opened with voice-call settings and reopened
+        // when the audio route changes (see android_audio).
+        #[cfg(target_os = "android")]
+        let thread = {
+            let _ = device_id;
+            std::thread::Builder::new()
+                .name("kolpak-playback".into())
+                .spawn(move || crate::android_audio::run_playback(mixer, ready_tx, thread_stop))
+                .map_err(|error| AudioError::Device(error.to_string()))?
+        };
+        #[cfg(not(target_os = "android"))]
         let thread = std::thread::Builder::new()
             .name("kolpak-playback".into())
             .spawn(move || match open_stream(device_id, mixer) {
@@ -381,7 +410,7 @@ impl Drop for Playback {
 }
 
 /// Pulls 48 kHz mono from the mixer and shapes it for the device.
-struct Renderer {
+pub(crate) struct Renderer {
     mixer: Arc<Mixer>,
     channels: usize,
     resampler: Option<Resampler>,
@@ -390,7 +419,19 @@ struct Renderer {
 }
 
 impl Renderer {
-    fn fill<T>(&mut self, data: &mut [T])
+    /// A renderer for a device that takes `channels` interleaved at `sample_rate`.
+    pub(crate) fn new(mixer: Arc<Mixer>, channels: u16, sample_rate: u32) -> Self {
+        Self {
+            mixer,
+            channels: usize::from(channels.max(1)),
+            resampler: (sample_rate != SAMPLE_RATE)
+                .then(|| Resampler::between(SAMPLE_RATE, sample_rate)),
+            block: Vec::with_capacity(4096),
+            ready: VecDeque::with_capacity(8192),
+        }
+    }
+
+    pub(crate) fn fill<T>(&mut self, data: &mut [T])
     where
         T: SizedSample + FromSample<f32>,
     {
@@ -417,6 +458,7 @@ impl Renderer {
     }
 }
 
+#[cfg(not(target_os = "android"))]
 fn open_stream(
     device_id: Option<String>,
     mixer: Arc<Mixer>,
@@ -444,14 +486,7 @@ fn open_stream(
     let sample_rate = config.sample_rate;
     let channels = config.channels;
 
-    let mut renderer = Renderer {
-        mixer,
-        channels: usize::from(channels.max(1)),
-        resampler: (sample_rate != SAMPLE_RATE)
-            .then(|| Resampler::between(SAMPLE_RATE, sample_rate)),
-        block: Vec::with_capacity(4096),
-        ready: VecDeque::with_capacity(8192),
-    };
+    let mut renderer = Renderer::new(mixer, channels, sample_rate);
     let on_error = |error: cpal::Error| log::warn!("output stream error: {error}");
 
     let stream = match format {

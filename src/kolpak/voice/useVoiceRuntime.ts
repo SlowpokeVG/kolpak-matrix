@@ -2,6 +2,7 @@ import { useEffect } from 'react';
 import { isDesktopTauri } from '$utils/platform';
 import { useVoiceSettings } from './useVoiceSettings';
 import {
+  applyCallAudio,
   applyOutputSettings,
   applyTransmitSettings,
   setPushToTalk,
@@ -43,6 +44,10 @@ export function useVoiceRuntime(): void {
   useEffect(() => {
     void applyOutputSettings(settings.outputDevice, settings.outputVolume);
   }, [settings.outputDevice, settings.outputVolume]);
+
+  useEffect(() => {
+    void applyCallAudio(settings.callAudio);
+  }, [settings.callAudio]);
 
   useEffect(() => {
     if (!isDesktopTauri() || settings.transmitMode !== 'ptt' || !settings.pttKey) {

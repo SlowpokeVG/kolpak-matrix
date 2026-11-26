@@ -11,8 +11,11 @@ use std::sync::{mpsc as std_mpsc, Arc};
 use std::thread::JoinHandle;
 use std::time::Duration;
 
+#[cfg(not(target_os = "android"))]
 use cpal::traits::{DeviceTrait, HostTrait, StreamTrait};
-use cpal::{FromSample, SampleFormat, SizedSample};
+#[cfg(not(target_os = "android"))]
+use cpal::SampleFormat;
+use cpal::{FromSample, SizedSample};
 use nnnoiseless::DenoiseState;
 use serde::Serialize;
 use tokio::sync::mpsc::{UnboundedReceiver, UnboundedSender};
@@ -62,6 +65,22 @@ pub struct InputDevice {
 }
 
 pub fn list_input_devices() -> Result<Vec<InputDevice>, AudioError> {
+    // Android routes voice itself (call mode, headsets, Bluetooth), and cpal's device list
+    // there needs a JNI context that Tauri does not set up. One entry: the system's choice.
+    #[cfg(target_os = "android")]
+    {
+        Ok(vec![InputDevice {
+            id: String::new(),
+            name: "Phone microphone".into(),
+            is_default: true,
+        }])
+    }
+    #[cfg(not(target_os = "android"))]
+    list_cpal_input_devices()
+}
+
+#[cfg(not(target_os = "android"))]
+fn list_cpal_input_devices() -> Result<Vec<InputDevice>, AudioError> {
     let host = cpal::default_host();
     let default_id = host
         .default_input_device()
@@ -282,7 +301,7 @@ fn denoise_frame(
 }
 
 /// Everything the audio callback owns.
-struct Processor {
+pub(crate) struct Processor {
     channels: usize,
     resampler: Option<Resampler>,
     mono: Vec<f32>,
@@ -297,7 +316,29 @@ struct Processor {
 }
 
 impl Processor {
-    fn push<T>(&mut self, data: &[T])
+    /// A processor for a device that delivers `channels` interleaved at `sample_rate`.
+    pub(crate) fn new(
+        channels: u16,
+        sample_rate: u32,
+        controls: Arc<Controls>,
+        sink: UnboundedSender<VoiceFrame>,
+    ) -> Result<Self, AudioError> {
+        Ok(Self {
+            channels: usize::from(channels.max(1)),
+            resampler: (sample_rate != SAMPLE_RATE).then(|| Resampler::new(sample_rate)),
+            mono: Vec::with_capacity(4096),
+            pending: Vec::with_capacity(FRAME_SAMPLES * 4),
+            packet: [0; MAX_OPUS_PACKET],
+            encoder: Encoder::new()?,
+            gate: Gate::new(),
+            denoiser: DenoiseState::new(),
+            clean: [0.0; FRAME_SAMPLES],
+            controls,
+            sink,
+        })
+    }
+
+    pub(crate) fn push<T>(&mut self, data: &[T])
     where
         T: SizedSample,
         f32: FromSample<T>,
@@ -386,6 +427,20 @@ impl Capture {
         let (ready_tx, ready_rx) = std_mpsc::channel::<Result<CaptureInfo, AudioError>>();
         let thread_stop = stop.clone();
 
+        // On Android the stream is AAudio's, opened with voice-call settings and reopened
+        // when the audio route changes (see android_audio). The device choice is the
+        // system's there.
+        #[cfg(target_os = "android")]
+        let thread = {
+            let _ = device_id;
+            std::thread::Builder::new()
+                .name("kolpak-capture".into())
+                .spawn(move || {
+                    crate::android_audio::run_capture(controls, sink, ready_tx, thread_stop)
+                })
+                .map_err(|error| AudioError::Device(error.to_string()))?
+        };
+        #[cfg(not(target_os = "android"))]
         let thread = std::thread::Builder::new()
             .name("kolpak-capture".into())
             .spawn(move || match open_stream(device_id, controls, sink) {
@@ -430,6 +485,7 @@ impl Drop for Capture {
     }
 }
 
+#[cfg(not(target_os = "android"))]
 fn open_stream(
     device_id: Option<String>,
     controls: Arc<Controls>,
@@ -458,19 +514,7 @@ fn open_stream(
     let sample_rate = config.sample_rate;
     let channels = config.channels;
 
-    let mut processor = Processor {
-        channels: usize::from(channels.max(1)),
-        resampler: (sample_rate != SAMPLE_RATE).then(|| Resampler::new(sample_rate)),
-        mono: Vec::with_capacity(4096),
-        pending: Vec::with_capacity(FRAME_SAMPLES * 4),
-        packet: [0; MAX_OPUS_PACKET],
-        encoder: Encoder::new()?,
-        gate: Gate::new(),
-        denoiser: DenoiseState::new(),
-        clean: [0.0; FRAME_SAMPLES],
-        controls,
-        sink,
-    };
+    let mut processor = Processor::new(channels, sample_rate, controls, sink)?;
     let on_error = |error: cpal::Error| log::warn!("microphone stream error: {error}");
 
     let stream = match format {

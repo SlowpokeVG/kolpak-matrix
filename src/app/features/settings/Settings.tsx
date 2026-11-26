@@ -50,6 +50,7 @@ import { SettingsLinkProvider } from './SettingsLinkContext';
 import { useSettingsLinkBaseUrl } from './useSettingsLinkBaseUrl';
 import { Desktop } from './desktop';
 import { VoiceSettingsPage } from '../../../kolpak/voice/VoiceSettingsPage';
+import { voiceSupported } from '../../../kolpak/voice/platform';
 import { isDesktopTauri } from '$utils/platform';
 import { Accessibility } from './accessibility/Accessibility';
 
@@ -281,7 +282,9 @@ export function Settings({
         .filter(
           (sec) =>
             (showPersona || sec.id !== 'persona') &&
-            (isDesktop || (sec.id !== 'desktop' && sec.id !== 'voice'))
+            (isDesktop || sec.id !== 'desktop') &&
+            // Kolpak: voice runs in the desktop and the Android app.
+            (sec.id !== 'voice' || voiceSupported())
         )
         .map((sec) => sec.id),
     [showPersona, isDesktop]

@@ -2,6 +2,7 @@ import { useCallback, useEffect, useState, type ChangeEventHandler } from 'react
 import { Box, Button, Input, Scroll, Text, toRem } from 'folds';
 import { PageContent, SettingsSectionPage } from '$components/page';
 import { SettingTile, SettingToggle } from '$components/setting-tile';
+import { isAndroidTauri } from '$utils/platform';
 import { useVoiceDefaults, useVoiceSettings } from './useVoiceSettings';
 import {
   formatKeyCode,
@@ -160,6 +161,9 @@ export function VoiceSettingsPage({ requestBack, requestClose }: VoiceSettingsPa
   const settings = useVoiceSettings();
   const voice = useVoice();
   const connected = voice.status === 'connected';
+  // Android routes voice itself and has no keyboard to hold: no device pickers, no
+  // push-to-talk key (the live sheet has a button to hold instead), and a call/media switch.
+  const android = isAndroidTauri();
 
   const onHost = useCallback<ChangeEventHandler<HTMLInputElement>>(
     (event) => updateVoiceSettings({ host: event.target.value }),
@@ -263,6 +267,20 @@ export function VoiceSettingsPage({ requestBack, requestClose }: VoiceSettingsPa
 
               <Box direction="Column" gap="100">
                 <Text size="L400">Speakers</Text>
+                {android && (
+                  <SettingToggle
+                    title="Call audio"
+                    focusId="voice-call-audio"
+                    description={
+                      settings.callAudio
+                        ? "Voice works like a phone call: your phone's echo cancellation is on, and sound goes to a Bluetooth or wired headset when one is connected, otherwise to the loudspeaker."
+                        : 'Voice plays as media: no echo cancellation (use headphones), and Bluetooth headphones keep their high-quality link.'
+                    }
+                    value={settings.callAudio}
+                    onChange={(callAudio) => updateVoiceSettings({ callAudio })}
+                    ariaLabel="voice-call-audio"
+                  />
+                )}
                 <SettingTile
                   title="Output"
                   description={
@@ -272,11 +290,13 @@ export function VoiceSettingsPage({ requestBack, requestClose }: VoiceSettingsPa
                       : 'Used when you join voice.')
                   }
                   after={
-                    <DeviceSelect
-                      kind="output"
-                      value={settings.outputDevice}
-                      onChange={(outputDevice) => updateVoiceSettings({ outputDevice })}
-                    />
+                    android ? undefined : (
+                      <DeviceSelect
+                        kind="output"
+                        value={settings.outputDevice}
+                        onChange={(outputDevice) => updateVoiceSettings({ outputDevice })}
+                      />
+                    )
                   }
                 />
                 <SettingTile
@@ -319,17 +339,22 @@ export function VoiceSettingsPage({ requestBack, requestClose }: VoiceSettingsPa
                 <SettingTile
                   title="Microphone"
                   description={
+                    (voice.microphoneDenied
+                      ? 'Kolpak may not use the microphone, so you are listening only. Allow it in Android settings → Apps → Kolpak → Permissions, then join again.'
+                      : undefined) ??
                     voice.captureError ??
                     (voice.captureDevice
                       ? `In use: ${voice.captureDevice}`
                       : 'Used when you join voice.')
                   }
                   after={
-                    <DeviceSelect
-                      kind="input"
-                      value={settings.inputDevice}
-                      onChange={(inputDevice) => updateVoiceSettings({ inputDevice })}
-                    />
+                    android ? undefined : (
+                      <DeviceSelect
+                        kind="input"
+                        value={settings.inputDevice}
+                        onChange={(inputDevice) => updateVoiceSettings({ inputDevice })}
+                      />
+                    )
                   }
                 />
                 <SettingTile
@@ -399,15 +424,24 @@ export function VoiceSettingsPage({ requestBack, requestClose }: VoiceSettingsPa
                     }
                   />
                 )}
-                <SettingTile
-                  title="Push-to-talk key"
-                  description={
-                    settings.transmitMode === 'ptt'
-                      ? 'Hold this key to talk. On Windows it works from any app; elsewhere only while Kolpak has focus. Click the button, then press the key. Escape cancels.'
-                      : 'Used when Transmit is set to Push to talk.'
-                  }
-                  after={<PushToTalkKey value={settings.pttKey} />}
-                />
+                {android ? (
+                  settings.transmitMode === 'ptt' && (
+                    <SettingTile
+                      title="Push to talk"
+                      description="Hold the TALK button in the live panel (tap the bar at the bottom of the screen) or on the bar itself."
+                    />
+                  )
+                ) : (
+                  <SettingTile
+                    title="Push-to-talk key"
+                    description={
+                      settings.transmitMode === 'ptt'
+                        ? 'Hold this key to talk. On Windows it works from any app; elsewhere only while Kolpak has focus. Click the button, then press the key. Escape cancels.'
+                        : 'Used when Transmit is set to Push to talk.'
+                    }
+                    after={<PushToTalkKey value={settings.pttKey} />}
+                  />
+                )}
               </Box>
             </Box>
           </PageContent>

@@ -11,7 +11,7 @@ mod matrix_crypto;
 mod mobile;
 #[cfg(any(target_os = "android", target_os = "ios"))]
 mod mobile_diagnostics;
-#[cfg(desktop)]
+#[cfg(any(desktop, target_os = "android"))]
 mod mumble;
 mod network;
 mod sentry;
@@ -350,6 +350,10 @@ pub fn run() {
         .manage(desktop::tray::DesktopSettingsState::default())
         .manage(mumble::MumbleState::default());
 
+    // Kolpak: Mumble voice on Android too (the native side of it is in mobile.rs).
+    #[cfg(target_os = "android")]
+    let builder = builder.manage(mumble::MumbleState::default());
+
     #[cfg(windows)]
     let builder = builder.manage(std::sync::Arc::new(
         desktop::windows::window_tracking::TrackingState::new(),
@@ -473,28 +477,30 @@ pub fn run() {
             network::media_protocol::prepare_loopback_media,
             network::media_protocol::ensure_loopback_media,
             sentry::set_native_sentry_enabled,
-            #[cfg(desktop)]
+            #[cfg(any(desktop, target_os = "android"))]
             mumble::mumble_connect,
-            #[cfg(desktop)]
+            #[cfg(any(desktop, target_os = "android"))]
             mumble::mumble_disconnect,
-            #[cfg(desktop)]
+            #[cfg(any(desktop, target_os = "android"))]
             mumble::mumble_join_channel,
-            #[cfg(desktop)]
+            #[cfg(any(desktop, target_os = "android"))]
             mumble::mumble_set_self,
-            #[cfg(desktop)]
+            #[cfg(any(desktop, target_os = "android"))]
             mumble::mumble_set_user_gains,
-            #[cfg(desktop)]
+            #[cfg(any(desktop, target_os = "android"))]
             mumble::mumble_set_transmit,
-            #[cfg(desktop)]
+            #[cfg(any(desktop, target_os = "android"))]
             mumble::mumble_ptt,
-            #[cfg(desktop)]
+            #[cfg(any(desktop, target_os = "android"))]
             mumble::audio_list_input_devices,
-            #[cfg(desktop)]
+            #[cfg(any(desktop, target_os = "android"))]
             mumble::audio_list_output_devices,
-            #[cfg(desktop)]
+            #[cfg(any(desktop, target_os = "android"))]
             mumble::mumble_set_output,
-            #[cfg(desktop)]
+            #[cfg(any(desktop, target_os = "android"))]
             mumble::mumble_get_state,
+            #[cfg(any(desktop, target_os = "android"))]
+            mumble::mumble_set_call_audio,
             #[cfg(feature = "matrix-crypto")]
             matrix_crypto::engine_invoke,
             #[cfg(feature = "matrix-crypto")]

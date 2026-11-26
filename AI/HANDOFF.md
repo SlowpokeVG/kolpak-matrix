@@ -15,7 +15,8 @@ A custom Matrix client for the KLPQ / Podkolpakom community that puts Matrix cha
 | Fork | Read and web-built on 2026-11-25 (see `FORK-NOTES.md`). Sable already ships a Tauri 2 shell for desktop, Android and iOS |
 | Branding | Drafted: logo, palette, type, components |
 | Desktop UI | Drafted: main client view and theater mode |
-| Mobile UI | Concept only (swipe panes + pull-up dock) |
+| Mobile UI | Android: live bar + live panel + stacked theater built, not run on a device (see "Android log") |
+| Android | Rebranded, Mumble voice native (AAudio, call mode), APK builds in CI; nothing verified on a phone yet |
 | Code | Sable `v1.22.11` merged with history; builds and runs on Windows with two small fixes (see "Spike 1 log") |
 | Service access | Matrix homeserver and two test accounts given in session on 2026-11-25; no Mumble or stream details yet |
 
@@ -190,7 +191,7 @@ Still Sable's, on purpose or pending a decision:
 - **Theme catalog.** `themeCatalogBaseUrl` still points at `SableClient/themes` on GitHub (a public repo, no key). Works; move or disable when Kolpak has its own.
 - **Internal names left alone:** the crate and binary (`sable.exe`), `package.json` name, `sable-media:` scheme, `--sable-*` CSS variables, notification action IDs, localStorage keys.
 - **Smaller leftovers:** unread/highlight favicon SVGs (`public/res/svg/unread.svg`, `highlight.svg`), `public/full_res_sable*.png`, the "Sable Default" ringtone name, two permission messages in `src/app/hooks/commands/profile.ts` that mention `app.sable.moe`, `gifs.sable.moe` in `src/app/utils/klipy.ts`, `Cargo.toml` `repository`, packaging scripts and `.github/` workflows.
-- **Mobile, untouched:** `sable://share` (paired with native share-extension code), `Info.plist`, `ios-project.yml`, Android project, the `moe.sable.client.*` identifiers in `tauri.pr/nightly/local.ios.conf.json`, and Sable's alternate launcher icons under `src-tauri/icons/{android,ios,app-icons}`.
+- **Mobile, untouched:** `sable://share` (paired with native share-extension code), `Info.plist`, `ios-project.yml`, the `moe.sable.client.*` identifiers in `tauri.pr/nightly/local.ios.conf.json`, and Sable's alternate launcher icons under `src-tauri/icons/{ios,app-icons}`. (The Android project was rebranded on 2026-11-26, see "Android log".)
 
 **Not done yet in Spike 1:** release build size and memory; the open rebrand items above; E2EE check; other OSes and Android.
 
@@ -397,6 +398,60 @@ Click someone else's name in the dock's voice tree: a panel opens on its own lin
 Checked live: joining voice sent the saved 40% for one person by their new session; MUTE FOR ME sent 0; RESET emptied the set. The first version of the panel sat inside the indented row and pushed the tree sideways (the owner caught it); now it measures exactly the tree's width. Not heard by ear: nobody was speaking during the check. Mixer tests cover the gain, the clamp, draining while muted and forgetting people who leave.
 
 A testing trap: `window.__TAURI_INTERNALS__.invoke` is read-only, so wrapping it to record IPC calls silently does nothing. Use the log line instead.
+
+## Android log
+
+### 2026-11-26 — the Android app: rebrand, Mumble voice, the phone layout, Element keys
+
+The owner asked for the Android app on Sable's Android project with all of Kolpak's features, and for the certificate and password to come over from Element automatically if possible. Built in a cloud session (Linux, no phone, no emulator). **Built, not run**: nothing below has been on a device yet.
+
+**Rebrand of the Android project** (`src-tauri/gen/android`):
+
+- Package and application ID `com.klpq.kolpak` (was `moe.sable.client`). Kotlin sources moved to `app/src/main/java/com/klpq/kolpak/` and `buildSrc/.../com/klpq/kolpak/`; the JNI function names in `src-tauri/src/mobile.rs` follow (`Java_com_klpq_kolpak_MainActivity_*`). Tauri generates `generated/` there from the identifier on every build.
+- App name Kolpak, deep-link schemes `kolpak` and `io.klpq` in the manifest, splash background `#0B0B0C`.
+- `app/google-services.json` deleted: it was Sable's Firebase project, and with a package that no longer matches it the Google services plugin would fail the build. Builds use the FOSS push flavour (`SABLE_FOSS=1`, UnifiedPush); there is still no push gateway (see the rebrand entry).
+- Launcher icons: the Guy on the paper tile (legacy and round), an adaptive icon (the Guy on `#EDEBE4`, kept whole inside the safe circle), a monochrome silhouette for themed icons, and the notification icon. Rendered from `AI/logo.svg` and `src-tauri/icons/kolpak-icon.svg` by `scripts/icons/render-android-icons.mjs` (Playwright's Chromium) into `src-tauri/icons/android`, which `gen/android/.../res` links to.
+- Sable's nine alternate launcher icons (pride variants of Sable's logo) are gone from the Android project and from `app-icons.json`; with none left, Settings → Appearance hides the app icon picker by itself. The generator step (`generate:app-icons:android`) is no longer in `tauri.android.conf.json`, which also removes the GitHub-tarball dependency from Android builds. The sources in `src-tauri/icons/app-icons` stay because the picker's previews import them.
+- **minSdk 28 (Android 9)**, was 24. Voice opens AAudio streams with the voice-communication preset and usage, which exist from API 28; Android links native libraries eagerly, so a lower minSdk would crash at start on Android 8. Set in `tauri.android.conf.json` (`bundle.android.minSdkVersion`, which also picks the NDK clang target) and in `app/build.gradle.kts`.
+- `proguard-rules.pro` keeps the static `*Native` methods of `MainActivity`, which only Rust calls through JNI.
+
+**Mumble voice on Android.** The whole Rust side now builds for Android: `mod mumble` and its commands are `cfg(any(desktop, target_os = "android"))` in `lib.rs`.
+
+- `crates/kolpak-mumble/src/android_audio.rs`: on Android the microphone and the speaker use AAudio directly (the `ndk` crate cpal already uses, with `api-level-28`), not cpal. cpal opens streams without an input preset or usage, which on a phone means no echo cancellation. **Call mode** (default): input preset `VoiceCommunication`, output usage `VoiceCommunication`, content type speech, so the phone's echo canceller, noise suppressor and gain control work. **Media mode**: preset `VoiceRecognition`, usage `Media`, for headphone users (no echo cancellation; Bluetooth headphones stay on A2DP). Streams open at 48 kHz mono when the device takes it, else at what AAudio picks (the existing resamplers handle it). A stream AAudio disconnects (headset in or out, Bluetooth coming or going) is closed and reopened by its thread. The device lists return one "system" entry on Android: cpal's list needs a JNI context Tauri does not set up, and routing is the system's.
+- `Processor::new` and `Renderer::new` were pulled out of the cpal openers so both paths share them; desktop behaviour is unchanged. 62 crate tests pass on Linux; `cargo check --target aarch64-linux-android` is clean.
+- `src-tauri/src/mumble.rs`: joining starts an Android **voice session** before any stream opens, leaving (or the connection dropping) ends it. New command `mumble_set_call_audio { enabled }`: switches call/media mode and, while connected, reopens both streams in the new mode (no-op on desktop). `leave_voice()` disconnects from outside the webview.
+- `src-tauri/src/mobile.rs`: `start_voice_session(call_mode)` / `stop_voice_session()` call `MainActivity.startVoiceSessionNative` / `stopVoiceSessionNative`. These come from Tokio threads, where JNI `FindClass` cannot see app classes on Android, so MainActivity's class is cached as a global reference in `nativeInitStatusBar` (which runs on the UI thread) and used for the calls. Sable's existing JNI helpers still look the class up by name; they work because they are called from sync commands.
+- `VoiceService.kt` (new): a foreground service while connected (type microphone when the permission is granted, media playback otherwise), with a "Kolpak voice / Connected to Mumble" notification, a **Leave** button (calls `nativeLeaveVoice` → `mumble::leave_voice`), a partial wake lock (12 h) and a low-latency Wi-Fi lock, so voice keeps going with the screen off. **Swiping the app away leaves voice** (`onTaskRemoved`): a session nobody can see or end is worse than none. Whether Tauri survives the activity being recreated while the process lives was not looked into; this sidesteps it.
+- `VoiceAudio.kt` (new): call mode puts the audio system in `MODE_IN_COMMUNICATION` and routes Bluetooth headset → wired/USB headset → loudspeaker, never the earpiece; re-routes when devices come and go (`setCommunicationDevice` on Android 12+, speakerphone/SCO switches on 9–11). Leaving restores the previous mode.
+- Microphone permission: the webview asks with `getUserMedia` before joining (Tauri's WebChromeClient turns that into Android's RECORD_AUDIO prompt). Refused → we join listening only and Settings → Voice says how to allow it.
+
+**The phone layout** (`src/kolpak/mobile`, mounted from `ClientLayout.tsx` on the Mobile screen size in the Android app; the desktop layout is untouched):
+
+- **Live bar**, 40px along the bottom of the client: the first live stream with viewers (+N more) or "off air"; the voice channel, head count and ping; in voice the mic and deafen squares and, in push-to-talk mode, a TALK button to hold. Hidden while something editable has focus, so it never sits on the keyboard. It is the home of the voice runtime on a phone and runs "join voice on startup".
+- **Live panel**: tapping the bar opens it over the client: the stream dock (player, channel, stats, WATCH), the voice dock (tree, join, leave, per-person volume) and a big HOLD TO TALK button. Back or ✕ closes it.
+- **Theater on a phone** (`<Theater stacked />`): over the whole client, picture at 16:9 on top with the channels and the voice line, the room chat under it; back leaves it. The panel steps aside while theater is open so the shared player has one host.
+- `TalkButton.tsx`: hold to send, pointer captured so sliding off does not cut it; released on lift, cancel, or the app going to the background. Says MIC OFF while self-muted.
+- Settings → Voice now shows on Android. There: a **Call audio** switch (call/media mode, above), no device pickers, and the push-to-talk key row replaced by a pointer to the TALK button. Voice-activity is still the default transmit mode.
+- Platform checks: `src/kolpak/voice/platform.ts` (`voiceSupported()` = desktop app or Android app) replaces `isDesktopTauri()` in the voice store. The desktop dock and status bar keep their own desktop checks.
+
+**Element: what can and cannot come over.** Android keeps each app's data private to it, and Element offers no way for another app to read its login or keys, so nothing can be lifted out of Element automatically. The password cannot come over at all: Element does not keep it. What does work, from best to last:
+
+1. Log in to Kolpak with the password, then verify the new session from Element (Element shows the new login; compare emoji or scan the QR). Verified, Element hands over the cross-signing and key-backup secrets and the history decrypts from the server-side key backup. Nothing to build; Sable does this.
+2. Or enter the Element **Security Key** (recovery key) when Kolpak asks to verify. Same result without the other device.
+3. Or export the keys from Element (Settings → Security & Privacy → Cryptography → Export E2E room keys, with a passphrase) and **share the file to Kolpak**: new in `src/kolpak/keys` — a single shared file that starts `-----BEGIN MEGOLM SESSION DATA-----` opens "Import message keys" (passphrase, then Sable's own import) instead of the room picker; "Send the file to a room instead" falls back to the normal share. Hooked into `ShareTargetFeature.tsx`; Sable's `ImportKeys` is now exported for it. Settings → Devices → Import Messages Data still works as before.
+
+**Builds.** `pnpm tauri android build --apk --target aarch64 -- --no-default-features --features wry,matrix-crypto,geolocation` with `SABLE_FOSS=1`. In this session the Rust core built and linked for aarch64 (`libapp_lib.so` 44 MB before packaging); Gradle needed retries with one worker (`GRADLE_OPTS=-Dorg.gradle.workers.max=1`) because the session's proxy answered Maven Central with 429 under parallel downloads. Typecheck, lint, format and 425 frontend tests in the touched areas pass.
+
+**CI.** `.github/workflows/build.yml` gains an `android` job (arm64 APK, FOSS push flavour, version code 2000000 + run number so each build updates the last) and the release waits for it and attaches `Kolpak-build-N-android-arm64.apk`. Signing uses the `ANDROID_KEY_BASE64` / `ANDROID_KEY_ALIAS` / `ANDROID_KEY_PASSWORD` secrets; make the key once with `scripts/android/make-signing-key.sh`. **Without the secrets the APK is signed with a throwaway key per build**, which installs but cannot update the previous build (the job warns). Only arm64 is built; 32-bit ARM (`armv7`) would roughly double the Rust build time.
+
+**Not verified (needs a phone):**
+
+- Anything at run time: start-up, login, sync, the layout at phone sizes, the share-to-import flow, the notification and its Leave button.
+- Voice: that AAudio opens with these presets on real devices, the echo canceller, routing to speaker / wired / Bluetooth (SCO) and re-routing, voice with the screen off for 30 minutes (SPEC §12 spike 4), push to talk by touch.
+- The release build with R8 (the keep rule for the JNI statics is written, not tested).
+- That desktop still builds after the shared changes (`mumble.rs`, `lib.rs`, the crate's audio openers): checked only that the crate builds and tests on Linux.
+
+**Still Sable's on Android:** `CallForegroundService` ("Call in progress / Sable is using your microphone", for Element Call, which Kolpak hides), the `Theme.sable` style name, the `sable://share` deep link, notification action IDs.
 
 ## Starting a new Claude session on this
 

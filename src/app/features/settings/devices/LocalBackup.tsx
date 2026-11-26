@@ -176,7 +176,7 @@ type ImportKeysProps = {
   file: File;
   onDone?: () => void;
 };
-function ImportKeys({ file, onDone }: ImportKeysProps) {
+export function ImportKeys({ file, onDone }: ImportKeysProps) {
   const mx = useMatrixClient();
   const alive = useAlive();
 

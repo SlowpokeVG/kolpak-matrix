@@ -26,6 +26,12 @@ export type VoiceSettings = {
   outputVolume: number;
   /** Remove steady background noise from the microphone. */
   noiseSuppression: boolean;
+  /**
+   * Android: voice as a phone call (the phone's echo cancellation; loudspeaker, wired or
+   * Bluetooth headset) rather than as media (no echo cancellation, Bluetooth headphones
+   * keep their high-quality link). Ignored elsewhere.
+   */
+  callAudio: boolean;
 };
 
 export type StoredVoiceSettings = Partial<VoiceSettings>;
@@ -70,6 +76,7 @@ export function sanitizeStoredVoiceSettings(raw: unknown): StoredVoiceSettings {
     out.outputVolume = src.outputVolume;
   }
   if (typeof src.noiseSuppression === 'boolean') out.noiseSuppression = src.noiseSuppression;
+  if (typeof src.callAudio === 'boolean') out.callAudio = src.callAudio;
   return out;
 }
 
@@ -90,6 +97,7 @@ export function resolveVoiceSettings(
     outputDevice: stored.outputDevice ?? '',
     outputVolume: stored.outputVolume ?? 1,
     noiseSuppression: stored.noiseSuppression ?? true,
+    callAudio: stored.callAudio ?? true,
   };
 }
 

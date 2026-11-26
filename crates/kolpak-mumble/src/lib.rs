@@ -10,6 +10,8 @@
 //! The crate has no Tauri in it. The app wraps [`connect`] in commands and forwards
 //! [`Event`]s to the webview; everything here can be built and tested on its own.
 
+#[cfg(all(feature = "audio", target_os = "android"))]
+pub mod android_audio;
 #[cfg(feature = "audio")]
 pub mod audio;
 pub mod client;

@@ -23,27 +23,27 @@
 # Keep Android bridge symbols used by Wry/Tauri JNI on release builds.
 # Without these, R8 can rename/remove methods like WryActivity.getId(),
 # which tao resolves by method name via JNI.
--keep class moe.sable.client.* {
+-keep class com.klpq.kolpak.* {
   native <methods>;
 }
 
--keep class moe.sable.client.WryActivity {
+-keep class com.klpq.kolpak.WryActivity {
   public <init>(...);
 
-  void setWebView(moe.sable.client.RustWebView);
+  void setWebView(com.klpq.kolpak.RustWebView);
   java.lang.Class getAppClass(...);
   java.lang.String getVersion();
   int startActivity(...);
   int getId();
 }
 
--keep class moe.sable.client.Ipc {
+-keep class com.klpq.kolpak.Ipc {
   public <init>(...);
 
   @android.webkit.JavascriptInterface public <methods>;
 }
 
--keep class moe.sable.client.RustWebView {
+-keep class com.klpq.kolpak.RustWebView {
   public <init>(...);
 
   void loadUrlMainThread(...);
@@ -51,6 +51,11 @@
   void evalScript(...);
 }
 
--keep class moe.sable.client.RustWebChromeClient,moe.sable.client.RustWebViewClient {
+-keep class com.klpq.kolpak.RustWebChromeClient,com.klpq.kolpak.RustWebViewClient {
   public <init>(...);
+}
+# Static methods that Rust calls through JNI (src-tauri/src/mobile.rs): nothing in Kotlin
+# calls them, so R8 would otherwise remove or rename them in release builds.
+-keepclassmembers class com.klpq.kolpak.MainActivity {
+  public static *** *Native(...);
 }

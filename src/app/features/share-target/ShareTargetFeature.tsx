@@ -25,6 +25,8 @@ import {
   isShareDeepLink,
   mergeShareBatches,
 } from './shareContent';
+import { looksLikeKeyExport } from '../../../kolpak/keys/keyExport';
+import { KeyImportPrompt } from '../../../kolpak/keys/KeyImportPrompt';
 
 const log = createLogger('ShareTargetFeature');
 
@@ -109,6 +111,39 @@ export function ShareTargetFeature() {
   }, [setPending]);
 
   const shareTargets = useMessageTargetRooms();
+
+  // Kolpak: a single shared file that is a room-key export (Element → Export E2E room keys →
+  // Share → Kolpak) opens the key import instead of the room picker.
+  const [keyCheck, setKeyCheck] = useState<'checking' | 'none' | File>('none');
+  const [shareKeyFile, setShareKeyFile] = useState(false);
+  useEffect(() => {
+    setShareKeyFile(false);
+    const files = pending ? collectShareFiles(pending.batches) : [];
+    const only =
+      files.length === 1 && pending && !collectShareText(pending.batches) ? files[0] : undefined;
+    if (!only) {
+      setKeyCheck('none');
+      return undefined;
+    }
+    let current = true;
+    setKeyCheck('checking');
+    shareInboxRead({ batchId: only.batchId, fileName: only.fileName })
+      .then((data) => {
+        if (!current) return;
+        const buffer = data as ArrayBuffer;
+        setKeyCheck(
+          looksLikeKeyExport(buffer)
+            ? new File([buffer], displayFileName(only.fileName), { type: 'text/plain' })
+            : 'none'
+        );
+      })
+      .catch(() => {
+        if (current) setKeyCheck('none');
+      });
+    return () => {
+      current = false;
+    };
+  }, [pending]);
 
   const handleClose = useCallback(async () => {
     if (busy || !pending) return;
@@ -201,6 +236,16 @@ export function ShareTargetFeature() {
   );
 
   if (!pending) return null;
+  if (keyCheck === 'checking') return null;
+  if (keyCheck !== 'none' && !shareKeyFile) {
+    return (
+      <KeyImportPrompt
+        file={keyCheck}
+        onClose={handleClose}
+        onShareInstead={() => setShareKeyFile(true)}
+      />
+    );
+  }
 
   return <SearchWrapper requestClose={handleClose} pickRoom={pickRoom} />;
 }

@@ -18,11 +18,11 @@ val tauriProperties = Properties().apply {
 
 android {
     compileSdk = 36
-    namespace = "moe.sable.client"
+    namespace = "com.klpq.kolpak"
     defaultConfig {
         manifestPlaceholders["usesCleartextTraffic"] = "false"
-        applicationId = "moe.sable.client"
-        minSdk = 24
+        applicationId = "com.klpq.kolpak"
+        minSdk = 28
         targetSdk = 36
         versionCode = tauriProperties.getProperty("tauri.android.versionCode", "1").toInt()
         versionName = tauriProperties.getProperty("tauri.android.versionName", "1.0")
@@ -74,7 +74,7 @@ android {
     }
     compileOptions {
         // tauri-plugin-livekit-mobile requires it: LiveKit/WebRTC call java.time
-        // APIs that only exist from API 26, and minSdk here is 24.
+        // APIs that only exist from API 26. (minSdk is 28 since Kolpak, for the AAudio voice presets.)
         isCoreLibraryDesugaringEnabled = true
     }
     kotlinOptions {

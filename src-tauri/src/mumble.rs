@@ -1,4 +1,6 @@
 //! Kolpak: the bridge between the webview and the Mumble client (crates/kolpak-mumble).
+//! Desktop and Android; on Android the app side of voice (foreground service, audio mode)
+//! is in mobile.rs and the Kotlin VoiceService / VoiceAudio.
 //!
 //! The webview sends commands and receives state; it never sees audio (AI/SPEC.md §3, §5.5).
 //! Built so far: the control connection and voice in both directions. The microphone is
@@ -293,6 +295,26 @@ async fn set_state<R: Runtime>(
     let _ = app.emit(EVENT_STATE, payload);
 }
 
+/// Android: while connected, a foreground service keeps the app (and so the connection and
+/// the audio threads) alive with the screen off, and in call mode the audio system is put in
+/// communication mode with the route picked for voice. Nothing to do elsewhere.
+fn voice_session(active: bool) {
+    #[cfg(target_os = "android")]
+    {
+        let result = if active {
+            crate::mobile::start_voice_session(kolpak_mumble::android_audio::call_mode())
+        } else {
+            crate::mobile::stop_voice_session()
+        };
+        if let Err(error) = result {
+            let what = if active { "start" } else { "stop" };
+            log::warn!("mumble: could not {what} the Android voice session: {error}");
+        }
+    }
+    #[cfg(not(target_os = "android"))]
+    let _ = active;
+}
+
 /// Open the microphone for the connection `generation` and start sending.
 async fn start_audio<R: Runtime>(
     app: &AppHandle<R>,
@@ -553,6 +575,8 @@ pub async fn mumble_connect<R: Runtime>(
             ..Default::default()
         },
     );
+    // Before any audio stream opens, so the streams start on the voice route.
+    voice_session(true);
 
     let options = ConnectOptions {
         host: args.host.trim().to_owned(),
@@ -571,6 +595,9 @@ pub async fn mumble_connect<R: Runtime>(
         Ok(connection) => connection,
         Err(error) => {
             let message = error.to_string();
+            if inner.lock().await.generation == generation {
+                voice_session(false);
+            }
             set_state(&app, &inner, generation, |full| {
                 full.state = MumbleStatePayload {
                     status: MumbleStatus::Disconnected,
@@ -676,6 +703,7 @@ pub async fn mumble_connect<R: Runtime>(
                             guard.audio = None;
                             guard.playback = None;
                             guard.mixer = None;
+                            voice_session(false);
                         }
                     }
                     set_state(&app, &inner, generation, |full| {
@@ -716,9 +744,22 @@ pub async fn mumble_disconnect<R: Runtime>(
     if let Some(client) = client {
         client.disconnect().await;
     }
+    voice_session(false);
     let _ = app.emit(EVENT_STATE, MumbleStatePayload::default());
     let _ = app.emit(EVENT_SNAPSHOT, MumbleSnapshot::default());
     Ok(())
+}
+
+/// Disconnect from outside the webview: the Leave button on Android's voice notification.
+#[cfg(target_os = "android")]
+pub fn leave_voice<R: Runtime>(app: AppHandle<R>) {
+    use tauri::Manager;
+    tauri::async_runtime::spawn(async move {
+        let state = app.state::<MumbleState>();
+        if let Err(error) = mumble_disconnect(app.clone(), state).await {
+            log::warn!("mumble: leaving from the notification failed: {error}");
+        }
+    });
 }
 
 #[tauri::command]
@@ -923,6 +964,49 @@ pub async fn audio_list_input_devices() -> Result<Vec<AudioInputDevice>, String>
             is_default: device.is_default,
         })
         .collect())
+}
+
+/// Android: call mode (the phone's echo cancellation, voice routing) or media mode (no echo
+/// cancellation, Bluetooth stays on its high-quality link). Kept for the next connection;
+/// while connected, the speaker and the microphone are reopened in the new mode. Does
+/// nothing on other platforms.
+#[tauri::command]
+pub async fn mumble_set_call_audio<R: Runtime>(
+    app: AppHandle<R>,
+    state: State<'_, MumbleState>,
+    enabled: bool,
+) -> Result<(), String> {
+    #[cfg(target_os = "android")]
+    {
+        use kolpak_mumble::android_audio;
+        if android_audio::call_mode() == enabled {
+            return Ok(());
+        }
+        android_audio::set_call_mode(enabled);
+        let inner = state.inner.clone();
+        let reopen = {
+            let mut guard = inner.lock().await;
+            match guard.client.clone() {
+                Some(client) => {
+                    // Close both streams before the audio system changes mode under them.
+                    guard.audio = None;
+                    guard.playback = None;
+                    Some((guard.generation, client))
+                }
+                None => None,
+            }
+        };
+        if let Some((generation, client)) = reopen {
+            if let Err(error) = crate::mobile::start_voice_session(enabled) {
+                log::warn!("mumble: could not switch the Android audio mode: {error}");
+            }
+            open_playback(&app, &inner, generation).await;
+            start_audio(&app, &inner, generation, client).await;
+        }
+    }
+    #[cfg(not(target_os = "android"))]
+    let _ = (app, state, enabled);
+    Ok(())
 }
 
 /// The current state, for a webview that has just loaded.

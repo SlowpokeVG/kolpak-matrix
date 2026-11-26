@@ -1,6 +1,7 @@
 import { useMemo } from 'react';
 import { useLocation } from 'react-router';
 import { useMatrixClient } from '$hooks/useMatrixClient';
+import { useDismissOnBack } from '$utils/androidBack';
 import { getCanonicalAliasRoomId, isRoomAlias } from '$utils/matrix';
 import { formatTape, type PlayableProtocol } from '../streams/stats';
 import { StreamPicture } from '../streams/StreamPicture';
@@ -46,9 +47,14 @@ function useRoomInAddress(): string | undefined {
   }, [mx, pathname]);
 }
 
-export function Theater() {
+/**
+ * `stacked`: the phone layout. Theater covers the client, the picture on top and the chat
+ * under it, and Android's back button leaves it.
+ */
+export function Theater({ stacked = false }: { stacked?: boolean }) {
   const view = useStreamView();
   const theater = useTheater();
+  useDismissOnBack(closeTheater, stacked);
   const addressRoom = useRoomInAddress();
   const voice = useVoice();
   const roomId = theater.roomId ?? addressRoom;
@@ -68,7 +74,7 @@ export function Theater() {
   const title = view.main?.userName ?? view.channel ?? '--';
 
   return (
-    <div className="kolpak-theater">
+    <div className={stacked ? 'kolpak-theater kolpak-theater--stacked' : 'kolpak-theater'}>
       <section className="kolpak-theater__main" aria-label="Theater">
         <header className="kolpak-theater__head">
           {view.live ? (

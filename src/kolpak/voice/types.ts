@@ -69,6 +69,8 @@ export type VoiceState = {
   udp: boolean;
   /** The server's last refusal (a channel we may not enter, say), and when it came. */
   denied?: { reason: string; at: number };
+  /** Android: the microphone permission was refused, so we joined listening only. */
+  microphoneDenied?: boolean;
 };
 
 export const EMPTY_SNAPSHOT: VoiceSnapshot = { session: null, channels: [], users: [] };

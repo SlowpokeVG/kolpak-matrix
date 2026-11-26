@@ -493,3 +493,74 @@
     font-size: 12px;
   }
 }
+
+/*
+ * Theater on a phone (Theater stacked): over the whole client, the picture on top with its
+ * channels and the voice line, the chat under it. The header wraps instead of clipping.
+ */
+@layer components {
+  .kolpak-theater--stacked {
+    position: absolute;
+    inset: 0;
+    z-index: 45;
+    display: flex;
+    flex-direction: column;
+  }
+
+  .kolpak-theater--stacked .kolpak-theater__main {
+    flex: none;
+  }
+
+  .kolpak-theater--stacked .kolpak-theater__head {
+    height: auto;
+    min-height: 48px;
+    flex-wrap: wrap;
+    row-gap: 6px;
+    padding: 8px 12px;
+  }
+
+  .kolpak-theater--stacked .kolpak-theater__title {
+    font-size: 18px;
+    flex: 1 1 40%;
+  }
+
+  .kolpak-theater--stacked .kolpak-theater__formats {
+    margin-left: 0;
+  }
+
+  .kolpak-theater--stacked .kolpak-theater__button {
+    margin-left: auto;
+  }
+
+  .kolpak-theater--stacked .kolpak-theater__body {
+    flex: none;
+    padding: 0 0 10px;
+    gap: 10px;
+  }
+
+  /* Full width at 16:9: the column has no height of its own to fill here. */
+  .kolpak-theater--stacked .kolpak-stream__picture.kolpak-theater__picture {
+    flex: none;
+    width: 100%;
+    aspect-ratio: 16 / 9;
+  }
+
+  .kolpak-theater--stacked .kolpak-theater__channels,
+  .kolpak-theater--stacked .kolpak-voice-strip {
+    padding-left: 12px;
+    padding-right: 12px;
+  }
+
+  .kolpak-theater--stacked .kolpak-theater__channels {
+    overflow-x: auto;
+    flex-wrap: nowrap;
+  }
+
+  .kolpak-theater--stacked .kolpak-theater-chat {
+    flex: 1 1 auto;
+    min-height: 0;
+    width: auto;
+    border-left: 0;
+    border-top: 2px solid var(--kolpak-panel, var(--sable-surface-container-line));
+  }
+}

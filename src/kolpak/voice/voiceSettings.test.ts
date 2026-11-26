@@ -17,7 +17,13 @@ describe('resolveVoiceSettings', () => {
       outputDevice: '',
       outputVolume: 1,
       noiseSuppression: true,
+      callAudio: true,
     });
+  });
+
+  it('keeps a saved choice of media audio over call audio', () => {
+    expect(resolveVoiceSettings({ callAudio: false }, defaults).callAudio).toBe(false);
+    expect(sanitizeStoredVoiceSettings({ callAudio: 'no' })).toEqual({});
   });
 
   it('prefers saved values, and treats blank text as not set', () => {

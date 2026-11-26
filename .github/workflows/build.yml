@@ -1,10 +1,12 @@
 name: Build
 
-# Builds the Kolpak desktop app on every push to main (and on pull requests into it, so a
-# broken build shows up before it lands). On main, once all three platforms have built, it
-# publishes a GitHub release "Kolpak build N" (tag build-N, N = this workflow's run
-# number) with every installer attached, marked latest. Pull requests only build.
-# No code signing and no auto-updater yet.
+# Builds the Kolpak desktop app and the Android app on every push to main (and on pull
+# requests into it, so a broken build shows up before it lands). On main, once everything has
+# built, it publishes a GitHub release "Kolpak build N" (tag build-N, N = this workflow's run
+# number) with every installer and the APK attached, marked latest. Pull requests only build.
+# No desktop code signing and no auto-updater yet. The APK is signed with the key in the
+# ANDROID_KEY_* secrets (scripts/android/make-signing-key.sh), or with a throwaway key when
+# they are not set.
 
 on:
   push:
@@ -73,9 +75,100 @@ jobs:
           if-no-files-found: error
           retention-days: 14
 
+  android:
+    name: Build Android
+    runs-on: ubuntu-24.04
+    # One ABI (arm64) of the Rust core in release mode, plus Gradle: about half an hour cold.
+    timeout-minutes: 90
+    env:
+      MISE_ENV: tauri
+      # UnifiedPush instead of Firebase: Kolpak has no Firebase project (AI/HANDOFF.md).
+      SABLE_FOSS: '1'
+      ANDROID_KEY_BASE64: ${{ secrets.ANDROID_KEY_BASE64 }}
+      ANDROID_KEY_ALIAS: ${{ secrets.ANDROID_KEY_ALIAS }}
+      ANDROID_KEY_PASSWORD: ${{ secrets.ANDROID_KEY_PASSWORD }}
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - name: Setup app
+        uses: ./.github/actions/setup
+        with:
+          tauri: 'true'
+
+      - name: Setup Android SDK + NDK
+        shell: bash
+        run: mise run tauri:setup:android
+
+      - name: Add the Rust target
+        shell: bash
+        run: rustup target add aarch64-linux-android
+
+      - name: Cache Rust build
+        uses: Swatinem/rust-cache@6323deb102c322ba6fcbdcafc7e3dddab59af2b6 # v2.9.2
+        with:
+          workspaces: src-tauri
+          key: android
+
+      - name: Setup Gradle
+        uses: gradle/actions/setup-gradle@9c971963bec38e04b3d30dcc455b5382be2fdbfb # v6.3.0
+
+      - name: Resolve NDK
+        shell: bash
+        run: echo "NDK_HOME=$ANDROID_HOME/ndk/$ANDROID_NDK_VERSION" >> "$GITHUB_ENV"
+
+      - name: Setup Android signing
+        shell: bash
+        run: |
+          cd src-tauri/gen/android
+          if [ -n "$ANDROID_KEY_BASE64" ]; then
+            base64 -d <<< "$ANDROID_KEY_BASE64" > "$RUNNER_TEMP/keystore.jks"
+            {
+              echo "keyAlias=$ANDROID_KEY_ALIAS"
+              echo "password=$ANDROID_KEY_PASSWORD"
+              echo "storeFile=$RUNNER_TEMP/keystore.jks"
+            } > keystore.properties
+          else
+            # No key configured: sign with a throwaway one so the APK installs at all. Phones
+            # will refuse the next build as an update (different key) until the secrets exist.
+            echo "::warning::ANDROID_KEY_* secrets are not set; the APK is signed with a throwaway key. See scripts/android/make-signing-key.sh."
+            PASSWORD=$(openssl rand -hex 16)
+            keytool -genkeypair -keystore "$RUNNER_TEMP/keystore.jks" -storetype PKCS12 \
+              -alias kolpak -keyalg RSA -keysize 2048 -validity 365 \
+              -storepass "$PASSWORD" -keypass "$PASSWORD" -dname "CN=Kolpak throwaway"
+            {
+              echo "keyAlias=kolpak"
+              echo "password=$PASSWORD"
+              echo "storeFile=$RUNNER_TEMP/keystore.jks"
+            } > keystore.properties
+          fi
+
+      - name: Build the APK
+        shell: bash
+        run: |
+          # Every build a higher version code than the last, so phones take it as an update.
+          VERSION_CODE=$((2000000 + GITHUB_RUN_NUMBER))
+          pnpm tauri android build --apk --target aarch64 \
+            --config "{\"bundle\":{\"android\":{\"versionCode\":$VERSION_CODE}}}" \
+            -- --no-default-features --features wry,matrix-crypto,geolocation
+          APK=$(find src-tauri/gen/android/app/build/outputs/apk -path '*release*' -name '*.apk' -type f | head -1)
+          [ -n "$APK" ] || { echo 'APK not found' >&2; exit 1; }
+          mkdir -p android-out
+          cp "$APK" "android-out/Kolpak-build-${{ github.run_number }}-android-arm64.apk"
+
+      - name: Upload the APK
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: kolpak-Android-${{ github.sha }}
+          path: android-out/*.apk
+          if-no-files-found: error
+          retention-days: 14
+
   release:
     name: Publish release
-    needs: desktop
+    needs: [desktop, android]
     if: github.event_name != 'pull_request' && github.ref == 'refs/heads/main'
     runs-on: ubuntu-latest
     timeout-minutes: 15
@@ -108,7 +201,7 @@ jobs:
               --repo "$REPO" \
               --target "$SHA" \
               --title "$TITLE" \
-              --notes "Built from ${SHA:0:9} on main. Unsigned: Windows SmartScreen and macOS Gatekeeper will warn before the first start." \
+              --notes "Built from ${SHA:0:9} on main. Desktop builds are unsigned: Windows SmartScreen and macOS Gatekeeper will warn before the first start. Android: install the arm64 APK (Android 9 or newer); allow installing from this source when asked." \
               --generate-notes \
               --latest
           fi

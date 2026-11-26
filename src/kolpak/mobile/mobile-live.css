@@ -1,0 +1,199 @@
+/*
+ * The live dock on a phone: the bar along the bottom of the client and the live panel over
+ * it (see MobileLive.tsx). Panel ground like the desktop dock, so the dock's mic and deafen
+ * squares read the same. Layered like the other Kolpak components; see
+ * ../layout/status-bar.css for why Sable's layers are named first.
+ */
+@layer sable-reset, folds, reset, tokens, base, components, theme, user;
+
+@layer components {
+  .kolpak-mobile-bar {
+    flex: none;
+    height: 40px;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding: 0 4px 0 0;
+    overflow: hidden;
+    white-space: nowrap;
+
+    background: var(--kolpak-panel, var(--sable-bg-container));
+    border-top: 2px solid var(--kolpak-black, var(--sable-bg-container-line));
+    color: var(--kolpak-paper, var(--sable-bg-on-container));
+    font-family: var(--kolpak-font-body, var(--font-secondary));
+    font-size: 13px;
+    font-weight: 700;
+    line-height: 1;
+    font-variant-numeric: tabular-nums;
+  }
+
+  .kolpak-mobile-bar__open {
+    appearance: none;
+    flex: 1 1 auto;
+    min-width: 0;
+    height: 100%;
+    display: flex;
+    align-items: center;
+    gap: 16px;
+    margin: 0;
+    padding: 0 12px;
+    border: 0;
+    background: none;
+    color: inherit;
+    font: inherit;
+    text-align: left;
+    cursor: pointer;
+  }
+
+  .kolpak-mobile-bar__streams,
+  .kolpak-mobile-bar__voice {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    min-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+
+  .kolpak-mobile-bar__voice {
+    margin-left: auto;
+    color: var(--kolpak-green, var(--sable-success-main));
+  }
+
+  .kolpak-mobile-bar__streams[data-idle='true'],
+  .kolpak-mobile-bar__voice[data-idle='true'] {
+    color: var(--kolpak-muted, inherit);
+    font-weight: 400;
+  }
+
+  .kolpak-mobile-bar__count {
+    color: var(--kolpak-muted, inherit);
+    font-weight: 400;
+  }
+
+  .kolpak-mobile-bar__controls {
+    flex: none;
+    display: flex;
+    align-items: center;
+    gap: 4px;
+  }
+
+  /* The live panel covers the client (not the system bars: it sits inside Sable's shell). */
+  .kolpak-live-sheet {
+    position: absolute;
+    inset: 0;
+    z-index: 40;
+    display: flex;
+    flex-direction: column;
+    min-height: 0;
+
+    background: var(--kolpak-panel, var(--sable-bg-container));
+    color: var(--kolpak-paper, var(--sable-bg-on-container));
+    font-family: var(--kolpak-font-body, var(--font-secondary));
+    font-size: 14px;
+  }
+
+  .kolpak-live-sheet__head {
+    flex: none;
+    height: 48px;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 0 4px 0 16px;
+    border-bottom: 2px solid var(--kolpak-black, var(--sable-bg-container-line));
+  }
+
+  .kolpak-live-sheet__title {
+    font-family: var(--kolpak-font-head, inherit);
+    font-size: 18px;
+    font-weight: 700;
+    font-synthesis: none;
+    letter-spacing: 0.03em;
+    text-transform: uppercase;
+  }
+
+  .kolpak-live-sheet__close {
+    appearance: none;
+    width: 44px;
+    height: 44px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    margin: 0;
+    padding: 0;
+    border: 0;
+    background: none;
+    color: inherit;
+    cursor: pointer;
+  }
+  .kolpak-live-sheet__close svg {
+    fill: none;
+    stroke: currentColor;
+    stroke-width: 2;
+    stroke-linecap: square;
+  }
+
+  .kolpak-live-sheet__body {
+    flex: 1 1 auto;
+    min-height: 0;
+    overflow-y: auto;
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+    padding: 14px 16px;
+  }
+
+  .kolpak-live-sheet__talk {
+    flex: none;
+    padding: 0 16px 16px;
+  }
+  .kolpak-live-sheet__talk:empty {
+    display: none;
+  }
+
+  /* Push to talk: hold. Paper outline at rest, green fill while sending. */
+  .kolpak-talk {
+    appearance: none;
+    margin: 0;
+    border: 2px solid var(--kolpak-paper, currentColor);
+    background: none;
+    color: var(--kolpak-paper, inherit);
+    font-family: var(--kolpak-font-head, inherit);
+    font-weight: 700;
+    font-synthesis: none;
+    letter-spacing: 0.04em;
+    text-transform: uppercase;
+    cursor: pointer;
+    user-select: none;
+    -webkit-user-select: none;
+    -webkit-touch-callout: none;
+    touch-action: none;
+  }
+  .kolpak-talk[data-transmitting='true'] {
+    background: var(--kolpak-green, var(--sable-success-main));
+    border-color: var(--kolpak-green, var(--sable-success-main));
+    color: var(--kolpak-ink, var(--sable-success-on-main));
+  }
+  .kolpak-talk:disabled {
+    border-color: var(--kolpak-line, currentColor);
+    color: var(--kolpak-muted, inherit);
+    cursor: default;
+  }
+
+  .kolpak-talk--big {
+    width: 100%;
+    height: 88px;
+    font-size: 22px;
+  }
+
+  .kolpak-talk--bar {
+    height: 32px;
+    padding: 0 10px;
+    font-size: 13px;
+  }
+
+  /* On a phone the dock's pieces take the panel's width. */
+  .kolpak-live-sheet .kolpak-dock__voice {
+    flex: none;
+  }
+}

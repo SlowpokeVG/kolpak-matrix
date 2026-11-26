@@ -423,6 +423,7 @@ dependencies = [
  "bytes",
  "cpal",
  "log",
+ "ndk",
  "nnnoiseless",
  "prost",
  "rustls",

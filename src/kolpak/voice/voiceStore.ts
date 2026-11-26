@@ -1,8 +1,9 @@
 import { useSyncExternalStore } from 'react';
 import { invoke } from '@tauri-apps/api/core';
 import { listen, type UnlistenFn } from '@tauri-apps/api/event';
-import { isDesktopTauri } from '$utils/platform';
+import { isAndroidTauri } from '$utils/platform';
 import { gainsFor, getPeopleSettings, subscribePeople } from './peopleSettings';
+import { ensureMicrophonePermission, voiceSupported } from './platform';
 import {
   EMPTY_SNAPSHOT,
   INITIAL_VOICE_STATE,
@@ -96,7 +97,7 @@ let bridge: Promise<UnlistenFn[]> | undefined;
 
 /** Start listening to the Mumble bridge. Safe to call more than once. */
 export function startVoiceBridge(): void {
-  if (bridge || !isDesktopTauri()) return;
+  if (bridge || !voiceSupported()) return;
   subscribePeople(syncGains);
   bridge = Promise.all([
     listen<VoiceStatePayload>('mumble://state', (event) => applyStatePayload(event.payload)),
@@ -173,8 +174,11 @@ export type VoiceTarget = {
  * first time and required to match after that (trust on first use).
  */
 export async function connectVoice({ host, port, username }: VoiceTarget): Promise<void> {
-  if (!isDesktopTauri()) return;
+  if (!voiceSupported()) return;
   startVoiceBridge();
+  // Android: the system asks once; without the microphone we join listening only.
+  const microphone = await ensureMicrophonePermission();
+  setState({ microphoneDenied: !microphone });
   try {
     const connected = await invoke<{ fingerprint: string; pinned: boolean }>('mumble_connect', {
       args: { host, port, username, pinnedFingerprint: readPin(host, port) },
@@ -191,7 +195,7 @@ export async function connectVoice({ host, port, username }: VoiceTarget): Promi
  * (changing the microphone reopens it) and are kept for the next connection.
  */
 export async function applyTransmitSettings(settings: TransmitSettings): Promise<void> {
-  if (!isDesktopTauri()) return;
+  if (!voiceSupported()) return;
   await invoke('mumble_set_transmit', {
     args: {
       mode: settings.mode,
@@ -205,30 +209,39 @@ export async function applyTransmitSettings(settings: TransmitSettings): Promise
 
 /** Output device ('' for the system default) and volume, 0 to 2. */
 export async function applyOutputSettings(outputDevice: string, volume: number): Promise<void> {
-  if (!isDesktopTauri()) return;
+  if (!voiceSupported()) return;
   await invoke('mumble_set_output', {
     args: { outputDevice: outputDevice || null, volume },
   }).catch(() => undefined);
 }
 
 export async function listOutputDevices(): Promise<InputDevice[]> {
-  if (!isDesktopTauri()) return [];
+  if (!voiceSupported()) return [];
   return invoke<InputDevice[]>('audio_list_output_devices').catch(() => []);
+}
+
+/**
+ * Android: call audio (the phone's echo cancellation, voice routing) or media audio. Applies
+ * at once when connected and is kept for the next connection. Nothing elsewhere.
+ */
+export async function applyCallAudio(enabled: boolean): Promise<void> {
+  if (!isAndroidTauri()) return;
+  await invoke('mumble_set_call_audio', { enabled }).catch(() => undefined);
 }
 
 /** Tell the native side whether the push-to-talk key is held. */
 export function setPushToTalk(down: boolean): void {
-  if (!isDesktopTauri()) return;
+  if (!voiceSupported()) return;
   void invoke('mumble_ptt', { down }).catch(() => undefined);
 }
 
 export async function listInputDevices(): Promise<InputDevice[]> {
-  if (!isDesktopTauri()) return [];
+  if (!voiceSupported()) return [];
   return invoke<InputDevice[]>('audio_list_input_devices').catch(() => []);
 }
 
 export async function disconnectVoice(): Promise<void> {
-  if (!isDesktopTauri()) return;
+  if (!voiceSupported()) return;
   await invoke('mumble_disconnect').catch(() => undefined);
 }
 

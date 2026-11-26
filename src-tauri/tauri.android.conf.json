@@ -1,6 +1,11 @@
 {
   "build": {
-    "beforeDevCommand": "pnpm generate:app-icons:android && pnpm dev",
-    "beforeBuildCommand": "pnpm generate:app-icons:android && pnpm build"
+    "beforeDevCommand": "pnpm dev",
+    "beforeBuildCommand": "pnpm build"
+  },
+  "bundle": {
+    "android": {
+      "minSdkVersion": 28
+    }
   }
 }
