@@ -82,6 +82,18 @@ const captureState = (payload: CapturePayload | undefined) => ({
   outputError: payload?.outputError,
 });
 
+/**
+ * The native side sends the microphone and speaker levels only while something shows them
+ * (the voice settings); the talking light comes regardless. Returns the cleanup.
+ */
+export function watchVoiceLevels(): () => void {
+  if (!voiceSupported()) return () => undefined;
+  void invoke('mumble_watch_levels', { watching: true }).catch(() => undefined);
+  return () => {
+    void invoke('mumble_watch_levels', { watching: false }).catch(() => undefined);
+  };
+}
+
 export type InputDevice = { id: string; name: string; isDefault: boolean };
 
 export type TransmitSettings = {

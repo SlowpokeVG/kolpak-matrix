@@ -12,7 +12,13 @@ import {
   useStoredVoiceSettings,
   type TransmitMode,
 } from './voiceSettings';
-import { listInputDevices, listOutputDevices, useVoice, type InputDevice } from './voiceStore';
+import {
+  listInputDevices,
+  listOutputDevices,
+  useVoice,
+  watchVoiceLevels,
+  type InputDevice,
+} from './voiceStore';
 import './voice-settings.css';
 
 // Settings → Voice: the Mumble server, the name we join with, the microphone, and how it
@@ -160,6 +166,8 @@ export function VoiceSettingsPage({ requestBack, requestClose }: VoiceSettingsPa
   const defaults = useVoiceDefaults();
   const settings = useVoiceSettings();
   const voice = useVoice();
+  // The meters below: levels come from the native side only while this page is open.
+  useEffect(() => watchVoiceLevels(), []);
   const connected = voice.status === 'connected';
   // Android routes voice itself and has no keyboard to hold: no device pickers, no
   // push-to-talk key (the live sheet has a button to hold instead), and a call/media switch.

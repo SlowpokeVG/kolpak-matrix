@@ -21,11 +21,11 @@
 //!                                                     when a device opens or fails
 
 use std::collections::{HashMap, HashSet};
-use std::sync::atomic::{AtomicU32, Ordering};
+use std::sync::atomic::{AtomicBool, AtomicU32, Ordering};
 use std::sync::Arc;
-use std::time::Duration;
+use std::time::{Duration, Instant};
 
-use kolpak_mumble::audio::{list_input_devices, pump_voice, Capture, Controls};
+use kolpak_mumble::audio::{list_input_devices, pump_voice, Capture, Controls, VoiceFrame};
 use kolpak_mumble::key_state;
 use kolpak_mumble::playback::{list_output_devices, Mixer, Playback};
 // Aliased so the generated TypeScript bindings can map it by a name that is ours
@@ -52,6 +52,11 @@ const EVENT_CAPTURE: &str = "audio://capture";
 const LEVELS_INTERVAL: Duration = Duration::from_millis(100);
 /// How often the push-to-talk key is read. 10 ms is half a voice frame.
 const PTT_POLL_INTERVAL: Duration = Duration::from_millis(10);
+/// Kolpak: how often the push-to-talk task looks again while push to talk is not in use.
+const PTT_IDLE_INTERVAL: Duration = Duration::from_millis(250);
+/// Kolpak: the output stream closes after this long with nobody talking, and opens again
+/// with the next voice packet (the mixer holds the first packets meanwhile).
+const PLAYBACK_IDLE_CLOSE: Duration = Duration::from_secs(60);
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Default)]
 #[serde(rename_all = "camelCase")]
@@ -147,9 +152,14 @@ pub struct MumbleFullState {
 }
 
 /// The microphone side of a live connection. Dropping it closes the microphone.
+///
+/// Kolpak: the microphone itself (`capture`) is open only while we may transmit, that is
+/// not muted or deafened (`sync_capture`); muted, the system's audio input and the noise
+/// suppressor rest. The controls and the frame channel live for the whole connection.
 struct AudioSession {
     controls: Arc<Controls>,
-    _capture: Option<Capture>,
+    sink: tokio::sync::mpsc::UnboundedSender<VoiceFrame>,
+    capture: Option<Capture>,
 }
 
 #[derive(Default)]
@@ -180,6 +190,12 @@ struct Inner {
     ptt_key: Arc<AtomicU32>,
     /// Noise suppression on the microphone; absent means on.
     denoise: Option<bool>,
+    /// Kolpak: the level meters are sent only while a page shows them
+    /// (`mumble_watch_levels`); the talking light is sent always.
+    levels_wanted: Arc<AtomicBool>,
+    /// Kolpak: the output stream was closed after a long silence and opens again with the
+    /// next voice packet.
+    playback_idle: Arc<AtomicBool>,
 }
 
 #[derive(Default)]
@@ -315,14 +331,16 @@ fn voice_session(active: bool) {
     let _ = active;
 }
 
-/// Open the microphone for the connection `generation` and start sending.
+/// Start the microphone side for the connection `generation`: the controls, the sender,
+/// push to talk and the meters. The microphone itself opens when we may transmit
+/// (`sync_capture`).
 async fn start_audio<R: Runtime>(
     app: &AppHandle<R>,
     inner: &Arc<Mutex<Inner>>,
     generation: u64,
     client: Client,
 ) {
-    let (mode, vad_threshold, device, ptt_key, denoise) = {
+    let (mode, vad_threshold, ptt_key, denoise, levels_wanted) = {
         let guard = inner.lock().await;
         if guard.generation != generation {
             return;
@@ -330,9 +348,9 @@ async fn start_audio<R: Runtime>(
         (
             guard.mode,
             guard.vad_threshold,
-            guard.input_device.clone(),
             guard.ptt_key.clone(),
             guard.denoise,
+            guard.levels_wanted.clone(),
         )
     };
     let controls = Arc::new(Controls::new(mode));
@@ -342,59 +360,43 @@ async fn start_audio<R: Runtime>(
     controls.set_denoise(denoise.unwrap_or(true));
 
     let (frame_tx, frame_rx) = tokio::sync::mpsc::unbounded_channel();
-    let capture_controls = controls.clone();
-    // Opening a device blocks for a moment; keep it off the async threads.
-    let opened = tauri::async_runtime::spawn_blocking(move || {
-        Capture::start(device, capture_controls, frame_tx)
-    })
-    .await;
-
-    let (capture, device_name, error) = match opened {
-        Ok(Ok(capture)) => {
-            let name = capture.info.device_name.clone();
-            (Some(capture), Some(name), None)
-        }
-        Ok(Err(error)) => (None, None, Some(error.to_string())),
-        Err(error) => (None, None, Some(error.to_string())),
-    };
-    if let Some(error) = &error {
-        log::warn!("mumble: microphone unavailable: {error}");
-    }
-
-    let payload = {
+    {
         let mut guard = inner.lock().await;
         if guard.generation != generation {
-            // Dropping `capture` here closes the microphone again.
             return;
         }
         controls.set_muted(is_muted(&guard.full.snapshot));
-        guard.full.capture.device_name = device_name;
-        guard.full.capture.error = error;
         guard.audio = Some(AudioSession {
             controls: controls.clone(),
-            _capture: capture,
+            sink: frame_tx,
+            capture: None,
         });
-        guard.full.capture.clone()
-    };
-    let _ = app.emit(EVENT_CAPTURE, payload);
+    }
 
     tauri::async_runtime::spawn(pump_voice(client, frame_rx));
+    sync_capture(app.clone(), inner.clone(), generation).await;
 
     // Push to talk from anywhere: read the key's state, which works while another app has
     // focus and does not take the key away from it. Ends when this microphone session does.
+    // Kolpak: quickly only while push to talk is on and a key is bound.
     if key_state::is_supported() {
         let session = Arc::downgrade(&controls);
         tauri::async_runtime::spawn(async move {
             let mut was_down = false;
+            let mut idle = false;
             loop {
-                tokio::time::sleep(PTT_POLL_INTERVAL).await;
+                tokio::time::sleep(if idle {
+                    PTT_IDLE_INTERVAL
+                } else {
+                    PTT_POLL_INTERVAL
+                })
+                .await;
                 let Some(controls) = session.upgrade() else {
                     break;
                 };
                 let key = ptt_key.load(Ordering::Relaxed);
-                let down = key != 0
-                    && controls.mode() == TransmitMode::Ptt
-                    && key_state::is_key_down(key as u16).unwrap_or(false);
+                idle = key == 0 || controls.mode() != TransmitMode::Ptt;
+                let down = !idle && key_state::is_key_down(key as u16).unwrap_or(false);
                 if down != was_down {
                     was_down = down;
                     controls.set_ptt(down);
@@ -403,7 +405,7 @@ async fn start_audio<R: Runtime>(
         });
     }
 
-    // Level meter and talking light for the UI.
+    // Talking light, and the level meters while a page shows them.
     let levels_app = app.clone();
     let levels_inner = inner.clone();
     tauri::async_runtime::spawn(async move {
@@ -421,7 +423,12 @@ async fn start_audio<R: Runtime>(
                 }
                 guard.mixer.as_ref().map_or(0.0, |mixer| mixer.level())
             };
-            let now = (controls.level(), output, controls.is_transmitting());
+            let wanted = levels_wanted.load(Ordering::Relaxed);
+            let now = if wanted {
+                (controls.level(), output, controls.is_transmitting())
+            } else {
+                (0.0, 0.0, controls.is_transmitting())
+            };
             if now != last {
                 last = now;
                 let _ = levels_app.emit(
@@ -437,6 +444,122 @@ async fn start_audio<R: Runtime>(
     });
 }
 
+/// Kolpak: open the microphone when we may transmit and close it when muted or deafened.
+/// Called when the microphone session starts and whenever the server's view of us changes.
+async fn sync_capture<R: Runtime>(app: AppHandle<R>, inner: Arc<Mutex<Inner>>, generation: u64) {
+    let (want, controls, sink, device) = {
+        let mut guard = inner.lock().await;
+        if guard.generation != generation {
+            return;
+        }
+        let want = !is_muted(&guard.full.snapshot);
+        let device = guard.input_device.clone();
+        let Some(audio) = guard.audio.as_mut() else {
+            return;
+        };
+        if want == audio.capture.is_some() {
+            return;
+        }
+        if !want {
+            let capture = audio.capture.take();
+            drop(guard);
+            voice_transmit(false);
+            // Dropping joins the capture thread; keep it off the async threads.
+            if let Some(capture) = capture {
+                let _ = tauri::async_runtime::spawn_blocking(move || drop(capture)).await;
+            }
+            return;
+        }
+        (want, audio.controls.clone(), audio.sink.clone(), device)
+    };
+    debug_assert!(want);
+
+    let capture_controls = controls.clone();
+    // Opening a device blocks for a moment; keep it off the async threads.
+    let opened = tauri::async_runtime::spawn_blocking(move || {
+        Capture::start(device, capture_controls, sink)
+    })
+    .await;
+    let (capture, device_name, error) = match opened {
+        Ok(Ok(capture)) => {
+            let name = capture.info.device_name.clone();
+            (Some(capture), Some(name), None)
+        }
+        Ok(Err(error)) => (None, None, Some(error.to_string())),
+        Err(error) => (None, None, Some(error.to_string())),
+    };
+    if let Some(error) = &error {
+        log::warn!("mumble: microphone unavailable: {error}");
+    }
+
+    let (unused, payload) = {
+        let mut guard = inner.lock().await;
+        let muted = is_muted(&guard.full.snapshot);
+        let current = guard.generation == generation
+            && guard
+                .audio
+                .as_ref()
+                .is_some_and(|audio| Arc::ptr_eq(&audio.controls, &controls));
+        if !current {
+            (capture, None)
+        } else {
+            guard.full.capture.device_name = device_name;
+            guard.full.capture.error = error;
+            let payload = Some(guard.full.capture.clone());
+            let audio = guard.audio.as_mut().expect("checked above");
+            if muted || audio.capture.is_some() {
+                // Muted again while it opened, or another call got there first.
+                (capture, payload)
+            } else {
+                audio.capture = capture;
+                (None, payload)
+            }
+        }
+    };
+    if let Some(payload) = payload {
+        let _ = app.emit(EVENT_CAPTURE, payload);
+    }
+    match unused {
+        Some(capture) => {
+            let _ = tauri::async_runtime::spawn_blocking(move || drop(capture)).await;
+        }
+        None => voice_transmit(true),
+    }
+}
+
+/// Kolpak: close the output stream while deafened and open it again when not.
+async fn sync_playback<R: Runtime>(app: AppHandle<R>, inner: Arc<Mutex<Inner>>, generation: u64) {
+    let reopen = {
+        let mut guard = inner.lock().await;
+        if guard.generation != generation || guard.mixer.is_none() {
+            return;
+        }
+        if is_deafened(&guard.full.snapshot) {
+            let playback = guard.playback.take();
+            drop(guard);
+            if let Some(playback) = playback {
+                let _ = tauri::async_runtime::spawn_blocking(move || drop(playback)).await;
+            }
+            return;
+        }
+        guard.playback.is_none() && !guard.playback_idle.load(Ordering::Relaxed)
+    };
+    if reopen {
+        open_playback(&app, &inner, generation).await;
+    }
+}
+
+/// Android: Wi-Fi stays in its low-latency mode only while the microphone is open. Nothing
+/// to do elsewhere.
+fn voice_transmit(on: bool) {
+    #[cfg(target_os = "android")]
+    if let Err(error) = crate::mobile::set_voice_transmit(on) {
+        log::warn!("mumble: could not tell the voice service about the microphone: {error}");
+    }
+    #[cfg(not(target_os = "android"))]
+    let _ = on;
+}
+
 /// Open the output device for the connection `generation` and play the mixer through it.
 async fn open_playback<R: Runtime>(app: &AppHandle<R>, inner: &Arc<Mutex<Inner>>, generation: u64) {
     let (mixer, device) = {
@@ -446,6 +569,11 @@ async fn open_playback<R: Runtime>(app: &AppHandle<R>, inner: &Arc<Mutex<Inner>>
         }
         // Close the old stream first; two streams would play the same audio twice.
         guard.playback = None;
+        guard.playback_idle.store(false, Ordering::Relaxed);
+        // Kolpak: nothing to play while deafened (sync_playback opens it again).
+        if is_deafened(&guard.full.snapshot) {
+            return;
+        }
         let Some(mixer) = guard.mixer.clone() else {
             return;
         };
@@ -485,7 +613,7 @@ async fn start_playback<R: Runtime>(
     mut voice: tokio::sync::mpsc::UnboundedReceiver<bytes::Bytes>,
 ) {
     let mixer = Arc::new(Mixer::new());
-    {
+    let idle = {
         let mut guard = inner.lock().await;
         if guard.generation != generation {
             return;
@@ -496,26 +624,43 @@ async fn start_playback<R: Runtime>(
         mixer.set_session_gains(&guard.user_gains);
         mixer.set_silenced(is_deafened(&guard.full.snapshot));
         guard.mixer = Some(mixer.clone());
-    }
+        guard.playback_idle.clone()
+    };
 
     // Decoding happens here, off the audio thread; the channel ends with the connection.
     let feed = mixer.clone();
+    let feed_app = app.clone();
+    let feed_inner = inner.clone();
     tauri::async_runtime::spawn(async move {
         while let Some(packet) = voice.recv().await {
             feed.push_packet(&packet);
+            // Kolpak: someone talks after a long silence: open the output stream again. The
+            // mixer holds what arrives until it plays.
+            if !feed.is_silenced() && idle.swap(false, Ordering::Relaxed) {
+                let app = feed_app.clone();
+                let inner = feed_inner.clone();
+                tauri::async_runtime::spawn(async move {
+                    open_playback(&app, &inner, generation).await;
+                });
+            }
         }
     });
 
-    open_playback(app, inner, generation).await;
+    sync_playback(app.clone(), inner.clone(), generation).await;
 
     let talking_app = app.clone();
     let talking_inner = inner.clone();
     tauri::async_runtime::spawn(async move {
         let mut last: Vec<u32> = Vec::new();
+        let mut last_active = Instant::now();
         loop {
             tokio::time::sleep(LEVELS_INTERVAL).await;
-            {
-                let guard = talking_inner.lock().await;
+            let now = mixer.talking();
+            if !now.is_empty() {
+                last_active = Instant::now();
+            }
+            let idle_close = {
+                let mut guard = talking_inner.lock().await;
                 let same = guard
                     .mixer
                     .as_ref()
@@ -523,8 +668,18 @@ async fn start_playback<R: Runtime>(
                 if guard.generation != generation || !same {
                     break;
                 }
+                // Kolpak: nobody has talked for a while: let the audio output rest.
+                if guard.playback.is_some() && last_active.elapsed() >= PLAYBACK_IDLE_CLOSE {
+                    guard.playback_idle.store(true, Ordering::Relaxed);
+                    guard.playback.take()
+                } else {
+                    None
+                }
+            };
+            if let Some(playback) = idle_close {
+                log::info!("mumble: nobody talking; output stream closed until someone does");
+                let _ = tauri::async_runtime::spawn_blocking(move || drop(playback)).await;
             }
-            let now = mixer.talking();
             if now != last {
                 last.clone_from(&now);
                 let _ = talking_app.emit(EVENT_TALKING, MumbleTalkingPayload { sessions: now });
@@ -558,6 +713,7 @@ pub async fn mumble_connect<R: Runtime>(
         guard.mixer = None;
         // Sessions belong to a connection; the webview sends the gains again once synced.
         guard.user_gains.clear();
+        guard.playback_idle.store(false, Ordering::Relaxed);
         guard.generation += 1;
         guard.full = MumbleFullState {
             state: MumbleStatePayload {
@@ -666,6 +822,17 @@ pub async fn mumble_connect<R: Runtime>(
                         guard.full.snapshot = snapshot.clone();
                     }
                     let _ = app.emit(EVENT_SNAPSHOT, snapshot);
+                    // Kolpak: the microphone and the speaker follow mute and deafen.
+                    tauri::async_runtime::spawn(sync_capture(
+                        app.clone(),
+                        inner.clone(),
+                        generation,
+                    ));
+                    tauri::async_runtime::spawn(sync_playback(
+                        app.clone(),
+                        inner.clone(),
+                        generation,
+                    ));
                 }
                 Event::Ping { rtt_ms } => {
                     {
@@ -928,6 +1095,21 @@ pub async fn audio_list_output_devices() -> Result<Vec<AudioInputDevice>, String
 /// Push-to-talk key state as seen by the webview, which only knows about keys pressed
 /// while its own window has focus. Used where the key cannot be read system-wide; where it
 /// can, the native reading is the only source, so the two never disagree.
+/// Kolpak: the webview shows the level meters (voice settings); levels are sent only then.
+#[tauri::command]
+pub async fn mumble_watch_levels(
+    state: State<'_, MumbleState>,
+    watching: bool,
+) -> Result<(), String> {
+    state
+        .inner
+        .lock()
+        .await
+        .levels_wanted
+        .store(watching, Ordering::Relaxed);
+    Ok(())
+}
+
 #[tauri::command]
 pub async fn mumble_ptt(state: State<'_, MumbleState>, down: bool) -> Result<(), String> {
     if key_state::is_supported() {
@@ -1000,7 +1182,7 @@ pub async fn mumble_set_call_audio<R: Runtime>(
             if let Err(error) = crate::mobile::start_voice_session(enabled) {
                 log::warn!("mumble: could not switch the Android audio mode: {error}");
             }
-            open_playback(&app, &inner, generation).await;
+            sync_playback(app.clone(), inner.clone(), generation).await;
             start_audio(&app, &inner, generation, client).await;
         }
     }

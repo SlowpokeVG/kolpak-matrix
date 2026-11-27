@@ -39,6 +39,11 @@ class VoiceService : Service() {
 
   override fun onBind(intent: Intent?): IBinder? = null
 
+  override fun onCreate() {
+    super.onCreate()
+    running = this
+  }
+
   override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
     if (intent?.action == ACTION_LEAVE) {
       leaveVoice()
@@ -67,6 +72,7 @@ class VoiceService : Service() {
   }
 
   override fun onDestroy() {
+    if (running === this) running = null
     releaseLocks()
     ServiceCompat.stopForeground(this, ServiceCompat.STOP_FOREGROUND_REMOVE)
     super.onDestroy()
@@ -129,6 +135,19 @@ class VoiceService : Service() {
         acquire(WAKE_LOCK_TIMEOUT_MS)
       }
     }
+    applyWifiLock()
+  }
+
+  /**
+   * Kolpak: Wi-Fi's low-latency mode (power saving off) only while the microphone is open,
+   * that is while we may talk. Listening copes with Wi-Fi power saving.
+   */
+  private fun applyWifiLock() {
+    if (!transmitting) {
+      wifiLock?.let { if (it.isHeld) it.release() }
+      wifiLock = null
+      return
+    }
     if (wifiLock?.isHeld != true) {
       val wm = applicationContext.getSystemService(WIFI_SERVICE) as WifiManager
       val mode = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
@@ -165,8 +184,20 @@ class VoiceService : Service() {
     private const val NOTIFICATION_ID = 1396
     private const val TAG = "KolpakVoice"
     private const val ACTION_LEAVE = "com.klpq.kolpak.voice.LEAVE"
-    // Renewed on every (re)start; long enough for a long evening in voice.
+    // Taken when the service starts; long enough for a long evening in voice. It keeps the
+    // connection's pings going with the screen off.
     private const val WAKE_LOCK_TIMEOUT_MS = 12L * 60L * 60L * 1000L
+
+    @Volatile
+    private var transmitting = false
+
+    @Volatile
+    private var running: VoiceService? = null
+
+    fun setTransmitting(on: Boolean) {
+      transmitting = on
+      running?.let { service -> android.os.Handler(service.mainLooper).post { service.applyWifiLock() } }
+    }
 
     fun start(context: Context) {
       try {

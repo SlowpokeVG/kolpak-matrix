@@ -503,6 +503,8 @@ pub fn run() {
             mumble::mumble_get_state,
             #[cfg(any(desktop, target_os = "android"))]
             mumble::mumble_set_call_audio,
+            #[cfg(any(desktop, target_os = "android"))]
+            mumble::mumble_watch_levels,
             #[cfg(feature = "matrix-crypto")]
             matrix_crypto::engine_invoke,
             #[cfg(feature = "matrix-crypto")]

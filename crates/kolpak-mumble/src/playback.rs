@@ -226,6 +226,11 @@ impl Mixer {
         f32::from_bits(self.level.load(Ordering::Relaxed))
     }
 
+    /// Deafened: incoming voice is dropped.
+    pub fn is_silenced(&self) -> bool {
+        self.silenced.load(Ordering::Relaxed)
+    }
+
     /// One voice packet as it came off the wire.
     pub fn push_packet(&self, packet: &[u8]) {
         if self.silenced.load(Ordering::Relaxed) {

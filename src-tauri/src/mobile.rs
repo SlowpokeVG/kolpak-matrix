@@ -223,6 +223,16 @@ pub(crate) fn stop_voice_session() -> Result<(), String> {
     call_activity_static("stopVoiceSessionNative", jni_sig!("()V"), &[])
 }
 
+/// Kolpak: the microphone opened or closed; the voice service keeps Wi-Fi in its
+/// low-latency mode only while it is open.
+pub(crate) fn set_voice_transmit(on: bool) -> Result<(), String> {
+    call_activity_static(
+        "setVoiceTransmitNative",
+        jni_sig!("(Z)V"),
+        &[JValue::Bool(on)],
+    )
+}
+
 fn call_activity_static(
     method: &str,
     sig: jni::signature::MethodSignature<'static, 'static>,

@@ -284,6 +284,12 @@ class MainActivity : TauriActivity() {
       VoiceAudio.release(context)
     }
 
+    // Kolpak: the microphone opened (unmuted) or closed (muted); see VoiceService.
+    @JvmStatic
+    fun setVoiceTransmitNative(transmit: Boolean) {
+      VoiceService.setTransmitting(transmit)
+    }
+
     // Kolpak: picture in picture for the stream, at the video's own shape (kept inside the
     // range Android accepts, about 1:2.39 to 2.39:1).
     @JvmStatic

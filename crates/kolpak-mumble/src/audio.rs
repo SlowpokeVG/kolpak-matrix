@@ -358,6 +358,16 @@ impl Processor {
         while self.pending.len() - offset >= FRAME_SAMPLES {
             let raw = &self.pending[offset..offset + FRAME_SAMPLES];
             offset += FRAME_SAMPLES;
+            // Kolpak: muted, or push to talk with the key up, and nothing going out: skip the
+            // noise suppressor, the meter and the encoder, which are most of the work.
+            if !self.controls.transmitting.load(Ordering::Relaxed)
+                && (self.controls.muted.load(Ordering::Relaxed)
+                    || (self.controls.mode() == TransmitMode::Ptt
+                        && !self.controls.ptt_down.load(Ordering::Relaxed)))
+            {
+                self.controls.level.store(0f32.to_bits(), Ordering::Relaxed);
+                continue;
+            }
             // The level and the gate see the cleaned signal, so steady room noise does not
             // hold voice activity open.
             let frame: &[f32] = if self.controls.denoise.load(Ordering::Relaxed) {
@@ -631,6 +641,37 @@ mod tests {
             level_out < level_in * 0.5,
             "noise went from {level_in} to {level_out}"
         );
+    }
+
+    /// A loud tone, enough to open voice activity.
+    fn tone(samples: usize) -> Vec<f32> {
+        (0..samples)
+            .map(|i| (i as f32 * 0.05).sin() * 0.5)
+            .collect()
+    }
+
+    #[test]
+    fn processor_rests_while_nothing_can_go_out() {
+        let (tx, mut rx) = tokio::sync::mpsc::unbounded_channel();
+        let controls = Arc::new(Controls::new(TransmitMode::Continuous));
+        let mut processor = Processor::new(1, SAMPLE_RATE, controls.clone(), tx).unwrap();
+
+        // Muted (the default): no frames, and the meter rests at zero.
+        processor.push(&tone(FRAME_SAMPLES * 10));
+        assert!(rx.try_recv().is_err());
+        assert_eq!(controls.level(), 0.0);
+
+        // Push to talk with the key up: the same.
+        controls.set_muted(false);
+        controls.set_mode(TransmitMode::Ptt);
+        processor.push(&tone(FRAME_SAMPLES * 10));
+        assert!(rx.try_recv().is_err());
+
+        // Key down: frames go out.
+        controls.set_ptt(true);
+        processor.push(&tone(FRAME_SAMPLES * 10));
+        assert!(rx.try_recv().is_ok());
+        assert!(controls.level() > 0.0);
     }
 
     #[test]
