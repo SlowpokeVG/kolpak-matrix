@@ -1,4 +1,5 @@
 import { useEffect } from 'react';
+import { getSlidingSyncManager } from '$client/initMatrix';
 import { useMatrixClient } from '$hooks/useMatrixClient';
 import { isAndroidTauri } from '$utils/platform';
 import { startPushKeyMirror } from './pushKeyMirror';
@@ -8,7 +9,9 @@ export function PushKeyMirror() {
   const mx = useMatrixClient();
   useEffect(() => {
     if (!isAndroidTauri()) return undefined;
-    const mirror = startPushKeyMirror(mx);
+    const mirror = startPushKeyMirror(mx, {
+      syncMode: () => (getSlidingSyncManager(mx) ? 'sliding' : 'classic'),
+    });
     return () => mirror.stop();
   }, [mx]);
   return null;

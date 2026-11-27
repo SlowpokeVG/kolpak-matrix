@@ -542,6 +542,8 @@ pub fn run() {
             push_keys::kolpak_push_keys_status,
             #[cfg(all(target_os = "android", feature = "matrix-crypto"))]
             push_keys::kolpak_push_keys_check,
+            #[cfg(all(target_os = "android", feature = "matrix-crypto"))]
+            push_keys::kolpak_push_keys_app_report,
             #[cfg(target_os = "ios")]
             ios::haptic_feedback,
             #[cfg(target_os = "ios")]

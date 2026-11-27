@@ -238,6 +238,49 @@ class UnifiedPushNotifierTest {
     }
 
     @Test
+    fun retryDecrypt_putsTheTextInQuietlyOnceTheKeyArrives() {
+        enablePushAccount()
+        mockkObject(PushPayloadDecryptor)
+        try {
+            every { PushPayloadDecryptor.decrypt(any(), any(), any(), any(), any()) } returns
+                PushDecryptResult.Failure(PushOutcome.DECRYPT_FAILED)
+            val raw = encryptedPayload("!late:example.org", "\$late")
+            assertEquals(UnifiedPushNotifier.Shown.PLACEHOLDER, UnifiedPushNotifier.showFromPush(context, raw))
+            // Still no key: try again later.
+            assertFalse(UnifiedPushNotifier.retryDecrypt(context, raw))
+
+            every { PushPayloadDecryptor.decrypt(any(), any(), any(), any(), any()) } returns
+                PushDecryptResult.Success("""{"type":"m.room.message","content":{"msgtype":"m.text","body":"late text"}}""")
+            assertTrue(UnifiedPushNotifier.retryDecrypt(context, raw))
+            val posted = shadowNotificationManager().getNotification(null, canonicalId("!late:example.org"))!!
+            assertTrue(posted.extras.getString(Notification.EXTRA_TEXT)!!.contains("late text"))
+            assertEquals(1, posted.extras.getParcelableArray(Notification.EXTRA_MESSAGES)!!.size)
+            assertTrue(posted.flags and Notification.FLAG_ONLY_ALERT_ONCE != 0)
+        } finally {
+            unmockkObject(PushPayloadDecryptor)
+        }
+    }
+
+    @Test
+    fun retryDecrypt_leavesADismissedNotificationAlone() {
+        enablePushAccount()
+        mockkObject(PushPayloadDecryptor)
+        try {
+            every { PushPayloadDecryptor.decrypt(any(), any(), any(), any(), any()) } returns
+                PushDecryptResult.Failure(PushOutcome.DECRYPT_FAILED)
+            val raw = encryptedPayload("!gone:example.org", "\$gone")
+            UnifiedPushNotifier.showFromPush(context, raw)
+            notificationManager.cancel(canonicalId("!gone:example.org"))
+            every { PushPayloadDecryptor.decrypt(any(), any(), any(), any(), any()) } returns
+                PushDecryptResult.Success("""{"type":"m.room.message","content":{"body":"too late"}}""")
+            assertTrue(UnifiedPushNotifier.retryDecrypt(context, raw))
+            assertNull(shadowNotificationManager().getNotification(null, canonicalId("!gone:example.org")))
+        } finally {
+            unmockkObject(PushPayloadDecryptor)
+        }
+    }
+
+    @Test
     fun showFromPush_stacksTheMessagesOfARoomOnce() {
         UnifiedPushNotifier.showFromPush(context, pushPayload("!stack:example.org", "\$one", "first"))
         UnifiedPushNotifier.showFromPush(context, pushPayload("!stack:example.org", "\$two", "second"))

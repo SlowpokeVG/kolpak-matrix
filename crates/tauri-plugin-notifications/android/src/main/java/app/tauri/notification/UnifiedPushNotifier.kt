@@ -9,6 +9,8 @@ import android.media.AudioAttributes
 import android.media.RingtoneManager
 import android.os.Build
 import androidx.core.app.NotificationCompat
+import java.util.concurrent.Executors
+import java.util.concurrent.TimeUnit
 import androidx.core.app.NotificationManagerCompat
 import androidx.core.app.Person
 import androidx.core.app.RemoteInput
@@ -113,7 +115,9 @@ object UnifiedPushNotifier {
         // The setting may have changed while decrypting.
         if (clear == null || !state.showEncryptedContent) {
             post(context, notification, ENCRYPTED_PLACEHOLDER)
-            return if (state.showEncryptedContent) Shown.PLACEHOLDER else Shown.FINAL
+            if (!state.showEncryptedContent) return Shown.FINAL
+            if (userId.isNotEmpty() && userId == state.pushUserId) scheduleDecryptRetry(context, rawMessage)
+            return Shown.PLACEHOLDER
         }
         if (isRing(clear)) {
             postIncomingCall(context, notification, clear)
@@ -123,6 +127,66 @@ object UnifiedPushNotifier {
         if (text == null) PushDiagnostics.record(context, PushOutcome.EMPTY_BODY)
         post(context, notification, text ?: "New message")
         return Shown.FINAL
+    }
+
+    /**
+     * Kolpak: when the key is missing, try again a few times as the app's copy of the keys
+     * catches up (the app copies a room key the moment it gets one, see
+     * src/kolpak/notifications/pushKeyMirror.ts), and put the text in the notification
+     * quietly. Delays add up: 15 s, 1 min, 3 min, 8 min, 18 min after the push.
+     */
+    private val RETRY_DELAYS_MS = longArrayOf(15_000, 45_000, 120_000, 300_000, 600_000)
+
+    private val retryExecutor by lazy {
+        Executors.newSingleThreadScheduledExecutor { runnable ->
+            Thread(runnable, "kolpak-push-retry").apply { isDaemon = true }
+        }
+    }
+
+    private fun scheduleDecryptRetry(context: Context, rawMessage: String, attempt: Int = 0) {
+        if (attempt >= RETRY_DELAYS_MS.size) return
+        val app = context.applicationContext
+        retryExecutor.schedule({
+            val done = runCatching { retryDecrypt(app, rawMessage) }.getOrDefault(true)
+            if (!done) scheduleDecryptRetry(app, rawMessage, attempt + 1)
+        }, RETRY_DELAYS_MS[attempt], TimeUnit.MILLISECONDS)
+    }
+
+    /** True when there is nothing more to do: decrypted, or the message is no longer shown. */
+    internal fun retryDecrypt(context: Context, rawMessage: String): Boolean {
+        val notification = MatrixPushPayload.parse(rawMessage) ?: return true
+        val roomId = notification.optString("room_id")
+        val userId = notification.optString("user_id")
+        val eventId = notification.optString("event_id")
+        if (roomId.isEmpty() || userId.isEmpty() || eventId.isEmpty()) return true
+        val state = UnifiedPushStateStore(context)
+        if (!state.showEncryptedContent || userId != state.pushUserId) return true
+        val notifId = roomNotificationId(userId, roomId)
+        val manager = context.getSystemService(NotificationManager::class.java) ?: return true
+        // Read, dismissed, or replaced by the app's own notification: leave it.
+        val active = manager.activeNotifications.firstOrNull { it.id == notifId && it.tag == null } ?: return true
+        val style = NotificationCompat.MessagingStyle.extractMessagingStyleFromNotification(active.notification)
+            ?: return true
+        val index = style.messages.indexOfFirst { it.extras.getString(EVENT_ID_EXTRA) == eventId }
+        if (index < 0) return true
+
+        val (clear, outcome) = decryptedEvent(context, notification)
+        if (clear == null) return false
+        PushDiagnostics.record(context, outcome)
+        if (isRing(clear)) return true
+        val text = previewText(clear) ?: "New message"
+        val old = style.messages[index]
+        style.messages[index] = NotificationCompat.MessagingStyle.Message(text, old.timestamp, old.person)
+            .also { it.extras.putAll(old.extras) }
+        val builder = NotificationCompat.Builder(context, active.notification)
+            .setStyle(style)
+            .setOnlyAlertOnce(true)
+            .setSilent(true)
+        if (index == style.messages.lastIndex) {
+            builder.setContentText(buildBody(notification.optString("sender_display_name"), text))
+        }
+        NotificationManagerCompat.from(context).notify(notifId, builder.build())
+        return true
     }
 
     /** One line for a decrypted event: the message, or what kind of thing was sent. */

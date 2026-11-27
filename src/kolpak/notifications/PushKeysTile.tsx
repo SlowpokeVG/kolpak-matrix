@@ -33,6 +33,15 @@ function describe(status: PushKeysStatus | undefined, error: string | undefined)
   const push = status.lastPush;
   if (push?.ok) lines.push(`Last notification decrypted ${time(push.at)}.`);
   else if (push) lines.push(`Last notification not decrypted ${time(push.at)}: ${push.error}`);
+  const { app } = status;
+  if (app.syncMode === 'sliding') lines.push('Sync: sliding (paused in the background).');
+  else if (app.syncMode) lines.push(`Sync: ${app.syncMode}.`);
+  lines.push(
+    app.lastBackgroundRun
+      ? `In the background the app last ran ${time(app.lastBackgroundRun)}.`
+      : 'Not seen running in the background yet.'
+  );
+  if (app.lastPushSeen) lines.push(`Last push the app received itself ${time(app.lastPushSeen)}.`);
   return lines.join(' ');
 }
 

@@ -10,9 +10,15 @@ const commands = vi.hoisted(() => ({
   ),
   kolpakPushKeysKnown: vi.fn<(params: unknown) => Promise<string[]>>(async () => ['old']),
   kolpakPushKeysCheck: vi.fn<(params: unknown) => Promise<unknown>>(),
+  kolpakPushKeysAppReport: vi.fn<(params: unknown) => Promise<void>>(async () => undefined),
   kolpakPushKeysWipe: vi.fn<(params: unknown) => Promise<void>>(async () => undefined),
 }));
 vi.mock('$generated/tauri/commands', () => commands);
+vi.mock('@tauri-apps/api/core', () => ({
+  addPluginListener: vi.fn<() => Promise<{ unregister: () => Promise<void> }>>(async () => ({
+    unregister: async () => undefined,
+  })),
+}));
 
 type Session = { sessionId: string };
 
@@ -70,8 +76,11 @@ describe('push key mirror', () => {
     });
     sessions.push('newer');
 
-    // Too soon after the last copy: waits, then copies.
+    // Too soon after the last copy: waits, then copies; and the app notes it is in the background.
     setVisibility('hidden');
+    expect(commands.kolpakPushKeysAppReport).toHaveBeenCalledWith(
+      expect.objectContaining({ event: 'background' })
+    );
     await vi.advanceTimersByTimeAsync(1_000);
     expect(commands.kolpakPushKeysImport).toHaveBeenCalledTimes(1);
     await vi.advanceTimersByTimeAsync(30_000);
@@ -87,7 +96,8 @@ describe('push key mirror', () => {
     emitter.emit(ClientEvent.ReceivedToDeviceMessage, { message: { type: 'm.room_key' } });
     emitter.emit(ClientEvent.ReceivedToDeviceMessage, { message: { type: 'm.room_key' } });
     emitter.emit(ClientEvent.ReceivedToDeviceMessage, { message: { type: 'm.dummy' } });
-    await vi.advanceTimersByTimeAsync(5_000);
+    // In the background a new key goes over at once, not after a timer.
+    await vi.advanceTimersByTimeAsync(10);
     expect(commands.kolpakPushKeysImport).toHaveBeenCalledTimes(3);
 
     mirror.stop();

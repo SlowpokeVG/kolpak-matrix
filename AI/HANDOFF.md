@@ -550,6 +550,15 @@ The owner: on start simple mode showed Home with "No rooms" (all their rooms are
 
 Checked in the browser: restart opens "TT main chat" under `/home/`; back shows the DM, the main chat and the space's other room in one list with no rail; the DM and the space room open from it with the composer.
 
+### 2026-11-27 — keys of new sessions that arrive while the app sleeps
+
+Overnight the owner got six "Encrypted message" pushes; the status screen said "Can't find the room key to decrypt the event", and opening the app at 06:52 copied "8 new" keys. So the senders had started new Megolm sessions (people or devices joining and leaving, the bot restarting) while the app was in the background, and the keys reached neither the webview nor the copy until the app opened. Why the webview got nothing in the background is not known yet: either Android killed the process overnight and the push service came back without a webview (then nobody can take the push), or the webview lives but hardly runs (Sable's `useSyncOrchestrator` pauses sliding sync 3 s after the app hides, resuming only for a call or a push drain; Chrome throttles hidden pages' timers). wry only calls `WebView.onPause()`, which does not stop JS; nothing calls `pauseTimers()`.
+
+This build helps either way and shows which it is:
+- **Native retries** (`UnifiedPushNotifier.scheduleDecryptRetry`/`retryDecrypt`): after a placeholder, decrypt again from the copy 15 s, 1, 3, 8 and 18 min after the push; on success the message's text is replaced in the room's notification quietly (only if that message is still shown and still Kolpak's own). Two Robolectric tests.
+- **Immediate copy in the background**: a room key arriving while the app is hidden is copied at once, not after a timer Chrome may hold for a minute.
+- **Signs of life** (`kolpak_push_keys_app_report`, shown in the status block): the sync kind (classic, or sliding, which pauses in the background), the last time the app ran while hidden (a heartbeat each minute and on hiding), and the last push the app itself received.
+
 ## Starting a new Claude session on this
 
 Open the session in a local clone of this repo and say something like:

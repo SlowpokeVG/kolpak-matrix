@@ -118,11 +118,26 @@ pub struct PushStatus {
     pub error: Option<String>,
 }
 
+/// What the app (the webview) reported about itself: whether it runs at all while in the
+/// background, and whether pushes reach it there.
+#[derive(Debug, Clone, Default, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct AppStatus {
+    /// "classic", or "sliding" (which the app pauses in the background).
+    pub sync_mode: Option<String>,
+    /// Last sign of life while the app was in the background.
+    pub last_background_run: Option<u64>,
+    /// Last push the app itself received.
+    pub last_push_seen: Option<u64>,
+}
+
 #[derive(Debug, Clone, Default, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 struct StoredStatus {
     last_copy: Option<CopyStatus>,
     last_push: Option<PushStatus>,
+    #[serde(default)]
+    app: AppStatus,
 }
 
 /// What the notification settings show.
@@ -133,6 +148,7 @@ pub struct PushKeysStatus {
     pub sessions: usize,
     pub last_copy: Option<CopyStatus>,
     pub last_push: Option<PushStatus>,
+    pub app: AppStatus,
 }
 
 #[derive(Debug, Clone, Serialize)]
@@ -333,7 +349,35 @@ async fn keys_status(
         sessions,
         last_copy: stored.last_copy,
         last_push: stored.last_push,
+        app: stored.app,
     })
+}
+
+/// The app reports a sign of life in the background (`event` "background") or a push it
+/// received ("push"), with the kind of sync it runs.
+#[cfg(target_os = "android")]
+#[tauri::command]
+pub async fn kolpak_push_keys_app_report(
+    app: tauri::AppHandle,
+    user_id: String,
+    device_id: String,
+    sync_mode: String,
+    event: String,
+) -> Result<(), String> {
+    record_app_report(&base_dir(&app)?, &user_id, &device_id, &sync_mode, &event);
+    Ok(())
+}
+
+fn record_app_report(base: &Path, user_id: &str, device_id: &str, sync_mode: &str, event: &str) {
+    let now = now_ms();
+    update_status(&mirror_dir(base, user_id, device_id), |status| {
+        status.app.sync_mode = Some(sync_mode.to_owned());
+        match event {
+            "background" => status.app.last_background_run = Some(now),
+            "push" => status.app.last_push_seen = Some(now),
+            _ => {}
+        }
+    });
 }
 
 /// Decrypt an event exactly as a push would be, for the "check" button in the settings.
@@ -568,8 +612,12 @@ mod tests {
         assert!(checked.ok);
         assert_eq!(checked.body.as_deref(), Some("дать пососать"));
 
+        record_app_report(&base, bob, dev, "classic", "push");
         let status = keys_status(&base, bob, dev).await.unwrap();
         assert_eq!(status.sessions, 1);
+        assert_eq!(status.app.sync_mode.as_deref(), Some("classic"));
+        assert!(status.app.last_push_seen.is_some());
+        assert!(status.app.last_background_run.is_none());
         assert_eq!(status.last_copy.unwrap().offered, 1);
         assert!(status.last_push.unwrap().ok);
 

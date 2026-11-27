@@ -1,4 +1,6 @@
+import { addPluginListener } from '@tauri-apps/api/core';
 import {
+  kolpakPushKeysAppReport,
   kolpakPushKeysCheck,
   kolpakPushKeysImport,
   kolpakPushKeysKnown,
@@ -74,7 +76,15 @@ export async function copyPushKeysNow(): Promise<void> {
   await active.copyNow();
 }
 
-export function startPushKeyMirror(mx: MatrixClient): Mirror {
+/** What the app is running, reported with the background signs of life. */
+export type MirrorOptions = { syncMode: () => string };
+
+const HEARTBEAT_MS = 60_000;
+
+export function startPushKeyMirror(
+  mx: MatrixClient,
+  options: MirrorOptions = { syncMode: () => 'unknown' }
+): Mirror {
   const userId = mx.getUserId();
   const deviceId = mx.getDeviceId();
   if (!userId || !deviceId) return { stop: () => undefined, copyNow: async () => undefined };
@@ -170,20 +180,47 @@ export function startPushKeyMirror(mx: MatrixClient): Mirror {
     }, delay);
   };
 
+  const hidden = (): boolean => document.visibilityState === 'hidden';
+
+  // Signs of life for the settings screen: whether the app runs at all in the background,
+  // and whether pushes reach it there (the push path cannot tell).
+  const report = (event: 'background' | 'push'): void => {
+    void kolpakPushKeysAppReport({
+      userId,
+      deviceId,
+      syncMode: options.syncMode(),
+      event,
+    }).catch(() => undefined);
+  };
+
   const onVisibility = (): void => {
-    if (document.visibilityState !== 'hidden') return;
+    if (!hidden()) return;
+    report('background');
     if (Date.now() - lastAt < MIN_GAP_MS) runSoon(MIN_GAP_MS);
     else void run().catch(() => undefined);
   };
 
   const onToDevice = (message: { message: { type?: unknown } }): void => {
-    if (isRoomKeyMessage(message.message.type)) runSoon(AFTER_NEW_KEYS_MS);
+    if (!isRoomKeyMessage(message.message.type)) return;
+    // In the background a timer can wait a minute; a push may be waiting for this key now.
+    if (hidden()) void run().catch(() => undefined);
+    else runSoon(AFTER_NEW_KEYS_MS);
   };
 
   const first = window.setTimeout(() => void run().catch(() => undefined), START_DELAY_MS);
   const timer = window.setInterval(() => void run().catch(() => undefined), PERIOD_MS);
+  const heartbeat = window.setInterval(() => {
+    if (hidden()) report('background');
+  }, HEARTBEAT_MS);
   document.addEventListener('visibilitychange', onVisibility);
   mx.on(ClientEvent.ReceivedToDeviceMessage, onToDevice);
+  let unlistenPush: (() => void) | undefined;
+  void addPluginListener('notifications', 'push-message', () => report('push'))
+    .then((listener) => {
+      if (stopped) void listener.unregister();
+      else unlistenPush = () => void listener.unregister();
+    })
+    .catch(() => undefined);
 
   const mirror: Mirror = {
     copyNow: () => run(),
@@ -192,6 +229,8 @@ export function startPushKeyMirror(mx: MatrixClient): Mirror {
       if (active === mirror) active = undefined;
       window.clearTimeout(first);
       window.clearInterval(timer);
+      window.clearInterval(heartbeat);
+      unlistenPush?.();
       if (soon !== undefined) window.clearTimeout(soon);
       document.removeEventListener('visibilitychange', onVisibility);
       mx.off(ClientEvent.ReceivedToDeviceMessage, onToDevice);
