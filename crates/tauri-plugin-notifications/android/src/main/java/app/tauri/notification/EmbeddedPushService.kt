@@ -143,24 +143,38 @@ class EmbeddedPushService : Service() {
     }
 
     private fun connect(url: String) {
+        val state = UnifiedPushStateStore(this)
+        if (state.activeProvider != "embedded" || state.endpoint != endpoint) return
+        val owner = Subscription(state.endpoint ?: return, state.pushUserId, state.pushDeviceId)
+        // Kolpak: checked before taking the wake lock, which an early return used to leave
+        // held until its timeout.
         if (!wakeLock.isHeld) wakeLock.acquire(CONNECT_WAKELOCK_MS)
 
         val http = client ?: OkHttpClient.Builder()
-            // The gateway sends its own keepalives; this catches a half-open socket.
+            // The gateway sends its own keepalives (every 45 s on ntfy), which also keep the
+            // connection alive through NAT; this ping only catches a half-open socket, so it
+            // can be rare. Kolpak: 3 min instead of 30 s, one radio wake-up fewer each time.
             .pingInterval(PING_SECONDS, TimeUnit.SECONDS)
             .retryOnConnectionFailure(true)
             .build()
             .also { client = it }
 
-        val state = UnifiedPushStateStore(this)
-        if (state.activeProvider != "embedded" || state.endpoint != endpoint) return
-        val owner = Subscription(state.endpoint ?: return, state.pushUserId, state.pushDeviceId)
-        val requestUrl = Request.Builder().url(url).build().url.newBuilder().addQueryParameter("since", "12h").build()
+        val since = replaySince(state.embeddedLastMessageTime, System.currentTimeMillis() / 1000)
+        val requestUrl = Request.Builder().url(url).build().url.newBuilder().addQueryParameter("since", since).build()
         socket = http.newWebSocket(Request.Builder().url(requestUrl).build(), Listener(owner))
     }
 
     private fun scheduleReconnect() {
         if (closing) return
+        // Kolpak: offline, the network callback reconnects when a network comes; until then
+        // only the rare heartbeat looks, instead of a retry with a wake lock every 2 minutes.
+        if (connectivity?.activeNetwork == null) {
+            Log.i(TAG, "No network; waiting for one before reconnecting")
+            cancelReconnect()
+            releaseWakeLock()
+            EmbeddedPushAlarm.schedule(this, HEARTBEAT_MS)
+            return
+        }
         val delay = retryDelay
         retryDelay = (retryDelay * 2).coerceAtMost(MAX_BACKOFF_MS)
         Log.i(TAG, "Reconnecting to the push gateway in ${delay}ms")
@@ -280,6 +294,9 @@ class EmbeddedPushService : Service() {
                     }
                     "message" -> {
                         PushDiagnostics.record(this@EmbeddedPushService, PushOutcome.EMBEDDED_MESSAGE_RECEIVED)
+                        val time = json.optLong("time")
+                        val store = UnifiedPushStateStore(this@EmbeddedPushService)
+                        if (time > store.embeddedLastMessageTime) store.embeddedLastMessageTime = time
                         if (ready) processMessage(owner, text, json) else pending.add(text to json)
                     }
                 }
@@ -361,12 +378,22 @@ class EmbeddedPushService : Service() {
             "Keeps a connection open so messages arrive without Google Play Services."
         private const val FOREGROUND_ID = 0x5AB1E
         private const val NORMAL_CLOSURE = 1000
-        private const val PING_SECONDS = 30L
+        private const val PING_SECONDS = 180L
         private const val WAKELOCK_TAG = "SableEmbeddedPush:WakeLock"
         private const val CONNECT_WAKELOCK_MS = 30_000L
         private const val HEARTBEAT_MS = 900_000L
         private const val BASE_BACKOFF_MS = 1_000L
         private const val MAX_BACKOFF_MS = 120_000L
+
+        /** ntfy's replay window: after the newest message seen (a minute's margin), at most 12 h. */
+        internal fun replaySince(lastMessageTime: Long, nowSeconds: Long): String =
+            if (lastMessageTime <= 0 || nowSeconds - lastMessageTime >= REPLAY_WINDOW_SECONDS) {
+                "12h"
+            } else {
+                (lastMessageTime - 60).toString()
+            }
+
+        private const val REPLAY_WINDOW_SECONDS = 12L * 60L * 60L
 
         fun start(context: Context, replay: Boolean = false) {
             val intent = Intent(context, EmbeddedPushService::class.java).putExtra("replay", replay)

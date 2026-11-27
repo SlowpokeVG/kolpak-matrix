@@ -65,6 +65,14 @@ internal class UnifiedPushStateStore(private val context: Context) {
     get() = prefs.getString("up-embedded-topic", null)
     set(value) = prefs.edit().putString("up-embedded-topic", value).apply()
 
+  /**
+   * Kolpak: server time (seconds) of the newest gateway message seen, so a reconnect asks
+   * only for what came after it instead of the last 12 hours.
+   */
+  var embeddedLastMessageTime: Long
+    get() = prefs.getLong("up-embedded-last", 0)
+    set(value) = prefs.edit().putLong("up-embedded-last", value).apply()
+
   fun prepareEmbeddedReplay(endpoint: String, freshTopic: Boolean) = synchronized(REPLAY_LOCK) {
     if (prefs.getString("up-replay-endpoint", null) != endpoint) {
       prefs.edit()
@@ -126,6 +134,7 @@ internal class UnifiedPushStateStore(private val context: Context) {
       .remove("up-replay-endpoint")
       .remove("up-replay-start")
       .remove("up-replay-completed")
+      .remove("up-embedded-last")
       .apply()
   }
 

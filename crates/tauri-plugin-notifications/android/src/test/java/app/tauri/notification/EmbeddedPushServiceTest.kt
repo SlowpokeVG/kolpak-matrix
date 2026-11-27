@@ -487,6 +487,13 @@ class EmbeddedPushServiceTest {
     }
 
     @Test
+    fun replayStartsAfterTheNewestMessageSeen() {
+        assertEquals("12h", EmbeddedPushService.replaySince(0, 1_000_000))
+        assertEquals("999940", EmbeddedPushService.replaySince(1_000_000, 1_000_100))
+        assertEquals("12h", EmbeddedPushService.replaySince(1_000_000, 1_000_000 + 12 * 3600))
+    }
+
+    @Test
     fun messagesBeforeOpenWaitForInitialization() {
         start()
         frame(0, message("A"))
