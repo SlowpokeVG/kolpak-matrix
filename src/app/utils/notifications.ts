@@ -1,13 +1,23 @@
 import type { MatrixClient, MatrixEvent, Room } from '$types/matrix-sdk';
-import { NotificationCountType, ReceiptType } from '$types/matrix-sdk';
+import { EventType, NotificationCountType, ReceiptType, RelationType } from '$types/matrix-sdk';
 import { isTauri } from '@tauri-apps/api/core';
+
+// Kolpak: a receipt goes on something the timeline shows. Edits, reactions and redactions
+// are not; with them, a bot that edits its message all day made the client post read
+// markers every few seconds (each a radio wake-up on a phone).
+const isReceiptTarget = (event: MatrixEvent): boolean => {
+  if (event.isSending()) return false;
+  const type = event.getType();
+  if (type === EventType.Reaction || type === EventType.RoomRedaction) return false;
+  return event.getRelation()?.rel_type !== RelationType.Replace;
+};
 
 const latestReceiptTarget = (timeline: MatrixEvent[], readEventId: string | null) => {
   for (let i = timeline.length - 1; i >= 0; i -= 1) {
     const event = timeline[i];
     if (!event) continue;
     if (event.getId() === readEventId) return null;
-    if (!event.isSending()) return event;
+    if (isReceiptTarget(event)) return event;
   }
   return null;
 };

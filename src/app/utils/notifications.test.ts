@@ -8,10 +8,16 @@ vi.mock('@tauri-apps/api/core', () => ({ isTauri: () => false }));
 const userId = '@me:example.com';
 const roomId = '!room:example.com';
 
-const event = (id: string, sending = false): MatrixEvent =>
+const event = (
+  id: string,
+  sending = false,
+  { type = 'm.room.message', relation }: { type?: string; relation?: string } = {}
+): MatrixEvent =>
   ({
     getId: () => id,
     isSending: () => sending,
+    getType: () => type,
+    getRelation: () => (relation ? { rel_type: relation, event_id: '$target' } : null),
   }) as unknown as MatrixEvent;
 
 type ThreadFixture = {
@@ -95,6 +101,33 @@ describe('markAsRead', () => {
     expect(setRoomReadMarkers).toHaveBeenCalledWith(roomId, '$newest', expect.anything());
     expect(setUnreadNotificationCount).toHaveBeenCalledWith(NotificationCountType.Total, 0);
     expect(setUnreadNotificationCount).toHaveBeenCalledWith(NotificationCountType.Highlight, 0);
+  });
+
+  it('marks the last shown event, not edits, reactions or redactions after it', async () => {
+    const { mx, setRoomReadMarkers } = makeMx(
+      [
+        event('$message'),
+        event('$edit', false, { relation: 'm.replace' }),
+        event('$reaction', false, { type: 'm.reaction', relation: 'm.annotation' }),
+        event('$redaction', false, { type: 'm.room.redaction' }),
+      ],
+      null
+    );
+
+    await markAsRead(mx, roomId, false);
+
+    expect(setRoomReadMarkers).toHaveBeenCalledWith(roomId, '$message', expect.anything());
+  });
+
+  it('sends nothing when only edits came after the read message', async () => {
+    const { mx, setRoomReadMarkers } = makeMx(
+      [event('$message'), event('$edit', false, { relation: 'm.replace' })],
+      '$message'
+    );
+
+    await markAsRead(mx, roomId, false);
+
+    expect(setRoomReadMarkers).not.toHaveBeenCalled();
   });
 
   it('does nothing when the last event is already read', async () => {

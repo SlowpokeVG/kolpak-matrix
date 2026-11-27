@@ -328,7 +328,10 @@ export const isPageVisible = (): boolean => document.visibilityState === 'visibl
 let nativeWindowFocused: boolean | undefined;
 const windowFocusListeners = new Set<(focused: boolean) => void>();
 
-export const isWindowFocused = (): boolean => nativeWindowFocused ?? document.hasFocus();
+// Kolpak: a hidden page is not focused, whatever the window says; on a phone the app in the
+// background could otherwise mark rooms read and post receipts.
+export const isWindowFocused = (): boolean =>
+  document.visibilityState !== 'hidden' && (nativeWindowFocused ?? document.hasFocus());
 
 // undefined releases the override and restores the DOM fallback.
 export const setNativeWindowFocused = (focused: boolean | undefined): void => {
