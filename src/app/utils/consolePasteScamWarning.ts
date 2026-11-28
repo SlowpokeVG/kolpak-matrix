@@ -57,7 +57,13 @@ export function installConsolePasteScamWarning(): void {
     devtoolsWasOpen = devtoolsLikelyOpen;
   };
 
-  window.setInterval(check, 1500);
+  // Kolpak: the docked-devtools guess needs a poll on the web; the desktop and phone apps
+  // have no devtools in release builds, so no timer there.
+  if (!('__TAURI_INTERNALS__' in window)) {
+    window.setInterval(() => {
+      if (document.visibilityState !== 'hidden') check();
+    }, 1500);
+  }
   window.addEventListener('resize', () => queueMicrotask(check));
 
   queueMicrotask(check);

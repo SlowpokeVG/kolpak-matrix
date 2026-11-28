@@ -13,12 +13,28 @@ import {
 import { usePreferredProtocol, useSelectedStreamChannel } from './streamStore';
 import { useChannelStreams, useStreamChannels } from './useStreamChannels';
 
-function useNow(intervalMs: number): number {
+/**
+ * The clock for the uptime counter. Kolpak: it ticks only while there is an uptime to count
+ * and the page can be seen; it used to re-render the dock every second, off air and hidden.
+ */
+function useNow(intervalMs: number, enabled: boolean): number {
   const [now, setNow] = useState(() => Date.now());
+  const [visible, setVisible] = useState(() => document.visibilityState !== 'hidden');
   useEffect(() => {
-    const timer = window.setInterval(() => setNow(Date.now()), intervalMs);
-    return () => window.clearInterval(timer);
-  }, [intervalMs]);
+    const onVisibility = () => setVisible(document.visibilityState !== 'hidden');
+    document.addEventListener('visibilitychange', onVisibility);
+    return () => document.removeEventListener('visibilitychange', onVisibility);
+  }, []);
+  useEffect(() => {
+    if (!enabled || !visible) return undefined;
+    const tick = () => setNow(Date.now());
+    const first = window.setTimeout(tick, 0);
+    const timer = window.setInterval(tick, intervalMs);
+    return () => {
+      window.clearTimeout(first);
+      window.clearInterval(timer);
+    };
+  }, [intervalMs, enabled, visible]);
   return now;
 }
 
@@ -59,11 +75,11 @@ export function useStreamView(): StreamView {
   const prefer = usePreferredProtocol();
   const channel = chooseChannel(channels, picked);
   const streams = useChannelStreams(streamStatsUrl, channel);
-  const now = useNow(1000);
   const player = usePlayer();
 
   const status = channels?.find((entry) => entry.name === channel);
   const live = Boolean(status?.live);
+  const now = useNow(1000, live);
   const source = useMemo(
     () => (live && streams ? pickSource(streams, prefer ?? undefined) : undefined),
     [live, streams, prefer]

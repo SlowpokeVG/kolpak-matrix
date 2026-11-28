@@ -49,7 +49,7 @@ describe('SystemBarShell', () => {
     expect(container.querySelector('[data-system-bar-position="bottom"]')).not.toBeInTheDocument();
   });
 
-  it('schedules an immediate rAF and a trailing 120ms timeout on mutation', () => {
+  it('samples once per burst of mutations, 150 ms after it starts', () => {
     vi.useFakeTimers();
     mockIsTauri.mockReturnValue(true);
     mockOsType.mockReturnValue('android');
@@ -87,12 +87,19 @@ describe('SystemBarShell', () => {
 
     expect(mutationCallback).toBeDefined();
     mutationCallback!([], {} as MutationObserver);
+    mutationCallback!([], {} as MutationObserver);
+    mutationCallback!([], {} as MutationObserver);
 
-    expect(rAFCount).toBe(rAFAfterMount + 1);
-    vi.advanceTimersByTime(119);
-    expect(rAFCount).toBe(rAFAfterMount + 1);
+    // Kolpak: nothing at once, and one sample for the whole burst.
+    expect(rAFCount).toBe(rAFAfterMount);
+    vi.advanceTimersByTime(149);
+    expect(rAFCount).toBe(rAFAfterMount);
     vi.advanceTimersByTime(1);
+    expect(rAFCount).toBe(rAFAfterMount + 1);
 
+    // The next burst gets its own sample.
+    mutationCallback!([], {} as MutationObserver);
+    vi.advanceTimersByTime(150);
     expect(rAFCount).toBe(rAFAfterMount + 2);
   });
 

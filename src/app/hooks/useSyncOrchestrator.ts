@@ -15,10 +15,23 @@ const STOP_DELAY_MS = 3000;
 const noopUnsubscribe = () => {};
 
 const subscribeToVisibility = (onChange: () => void): (() => void) => {
-  document.addEventListener('visibilitychange', onChange);
+  // Kolpak: the recheck catches missed visibility events on the phone, where sync pauses in
+  // the background and Android's WebView can miss them all; it runs only there. It used to
+  // tick every 2 s on every platform.
+  let recheck: number | undefined;
+  const armRecheck = () => {
+    if (isMobileTauri() && recheck === undefined) {
+      recheck = window.setInterval(onChange, VISIBILITY_RECHECK_MS);
+    }
+  };
+  const onVisibility = () => {
+    armRecheck();
+    onChange();
+  };
+  document.addEventListener('visibilitychange', onVisibility);
   window.addEventListener('focus', onChange);
   window.addEventListener('pageshow', onChange);
-  const recheck = window.setInterval(onChange, VISIBILITY_RECHECK_MS);
+  armRecheck();
 
   let cancelled = false;
   let unlistenResumed: (() => void) | undefined;
@@ -31,10 +44,10 @@ const subscribeToVisibility = (onChange: () => void): (() => void) => {
 
   return () => {
     cancelled = true;
-    document.removeEventListener('visibilitychange', onChange);
+    document.removeEventListener('visibilitychange', onVisibility);
     window.removeEventListener('focus', onChange);
     window.removeEventListener('pageshow', onChange);
-    window.clearInterval(recheck);
+    if (recheck !== undefined) window.clearInterval(recheck);
     unlistenResumed?.();
   };
 };

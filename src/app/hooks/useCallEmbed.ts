@@ -1,7 +1,7 @@
 import type { RefObject } from 'react';
 import { createContext, useCallback, useContext, useEffect, useRef, useState } from 'react';
 import type { MatrixClient, Room } from '$types/matrix-sdk';
-import { useSetAtom, useStore } from 'jotai';
+import { useAtomValue, useSetAtom, useStore } from 'jotai';
 import * as Sentry from '@sentry/react';
 import type { ElementCallThemeKind } from '../plugins/call';
 import { CallEmbed, ElementWidgetActions, useClientWidgetApiEvent } from '../plugins/call';
@@ -262,7 +262,12 @@ export const useCallEmbedPlacementSync = (
     useCallback(() => containerViewRef.current, [containerViewRef])
   );
 
+  // Kolpak: the per-frame placement runs only while a call embed exists; without one it
+  // used to run 60 times a second for nothing whenever a call view was mounted.
+  const hasEmbed = useAtomValue(callEmbedAtom) !== undefined;
+
   useEffect(() => {
+    if (!hasEmbed) return undefined;
     let raf = 0;
     let last = '';
     const tick = () => {
@@ -284,5 +289,5 @@ export const useCallEmbedPlacementSync = (
     };
     raf = requestAnimationFrame(tick);
     return () => cancelAnimationFrame(raf);
-  }, [callEmbedRef, containerViewRef]);
+  }, [callEmbedRef, containerViewRef, hasEmbed]);
 };

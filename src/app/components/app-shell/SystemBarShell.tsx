@@ -86,10 +86,17 @@ function useBarColor(
       if (frame) cancelAnimationFrame(frame);
       frame = requestAnimationFrame(sample);
     };
+    // Kolpak: one sample per burst of changes, shortly after it settles. It used to sample
+    // at once and again 120 ms later for every mutation batch, which in a busy chat meant
+    // forced style work on every new message.
+    let scheduled = false;
     const schedule = () => {
-      runSample();
-      window.clearTimeout(timer);
-      timer = window.setTimeout(runSample, 120);
+      if (scheduled) return;
+      scheduled = true;
+      timer = window.setTimeout(() => {
+        scheduled = false;
+        runSample();
+      }, 150);
     };
 
     runSample();

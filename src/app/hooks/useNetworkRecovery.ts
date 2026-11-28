@@ -98,7 +98,8 @@ export const useNetworkRecovery = (mx: MatrixClient | undefined): void => {
     window.addEventListener('online', onOnline);
     document.addEventListener('visibilitychange', onVisible);
 
-    const stallCheck = window.setInterval(() => {
+    // Kolpak: only while the app can be seen; coming back nudges sync anyway (onVisible).
+    const stallTick = () => {
       if (Date.now() - lastSyncAtRef.current < SYNC_STALL_MS) {
         deadNudgesRef.current = 0;
         return;
@@ -115,7 +116,20 @@ export const useNetworkRecovery = (mx: MatrixClient | undefined): void => {
       // Give the keepalive poke its own stall window before escalating again.
       lastSyncAtRef.current = Date.now();
       abortClassicSyncPoll(mx);
-    }, STALL_CHECK_INTERVAL_MS);
+    };
+    let stallCheck: number | undefined;
+    const armStallCheck = () => {
+      const wanted = document.visibilityState !== 'hidden';
+      if (wanted && stallCheck === undefined) {
+        stallCheck = window.setInterval(stallTick, STALL_CHECK_INTERVAL_MS);
+      }
+      if (!wanted && stallCheck !== undefined) {
+        window.clearInterval(stallCheck);
+        stallCheck = undefined;
+      }
+    };
+    armStallCheck();
+    document.addEventListener('visibilitychange', armStallCheck);
 
     const unlisten = isTauri()
       ? listen(TauriEvent.WINDOW_RESUMED, () => nudgeForeground('resumed', { force: true }))
@@ -124,7 +138,8 @@ export const useNetworkRecovery = (mx: MatrixClient | undefined): void => {
     return () => {
       window.removeEventListener('online', onOnline);
       document.removeEventListener('visibilitychange', onVisible);
-      window.clearInterval(stallCheck);
+      document.removeEventListener('visibilitychange', armStallCheck);
+      if (stallCheck !== undefined) window.clearInterval(stallCheck);
       cancelVerify();
       unlisten?.then((off) => off());
     };
