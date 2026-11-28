@@ -15,6 +15,8 @@ mod mobile_diagnostics;
 mod mumble;
 mod network;
 #[cfg(all(any(target_os = "android", test), feature = "matrix-crypto"))]
+mod notify_device;
+#[cfg(all(any(target_os = "android", test), feature = "matrix-crypto"))]
 mod push_keys;
 mod sentry;
 mod share_inbox;
@@ -546,6 +548,12 @@ pub fn run() {
             push_keys::kolpak_push_keys_check,
             #[cfg(all(target_os = "android", feature = "matrix-crypto"))]
             push_keys::kolpak_push_keys_app_report,
+            #[cfg(all(target_os = "android", feature = "matrix-crypto"))]
+            notify_device::kolpak_notify_login,
+            #[cfg(all(target_os = "android", feature = "matrix-crypto"))]
+            notify_device::kolpak_notify_logout,
+            #[cfg(all(target_os = "android", feature = "matrix-crypto"))]
+            notify_device::kolpak_notify_status,
             #[cfg(target_os = "ios")]
             ios::haptic_feedback,
             #[cfg(target_os = "ios")]

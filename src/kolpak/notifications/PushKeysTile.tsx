@@ -31,8 +31,10 @@ function describe(status: PushKeysStatus | undefined, error: string | undefined)
   else if (copy) lines.push(`Last copy ${time(copy.at)}: ${copy.added} new, ${copy.ms} ms.`);
   else lines.push('Nothing copied yet.');
   const push = status.lastPush;
-  if (push?.ok) lines.push(`Last notification decrypted ${time(push.at)}.`);
-  else if (push) lines.push(`Last notification not decrypted ${time(push.at)}: ${push.error}`);
+  if (push?.ok) {
+    const by = push.via === 'device' ? ' by the notification device' : '';
+    lines.push(`Last notification decrypted${by} ${time(push.at)}.`);
+  } else if (push) lines.push(`Last notification not decrypted ${time(push.at)}: ${push.error}`);
   const { app } = status;
   if (app.syncMode === 'sliding') lines.push('Sync: sliding (paused in the background).');
   else if (app.syncMode) lines.push(`Sync: ${app.syncMode}.`);

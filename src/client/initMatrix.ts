@@ -31,6 +31,7 @@ import { createLogger } from '$utils/debug';
 import { createDebugLogger } from '$utils/debugLogger';
 import { isAndroidTauri, isMobileTauri } from '$utils/platform';
 import { wipePushKeys } from '../kolpak/notifications/pushKeyMirror';
+import { disableNotifyDevice } from '../kolpak/notifications/notifyDevice';
 import * as Sentry from '@sentry/react';
 import { pushSessionToSW } from '../sw-session';
 import { assertAuthMetadataIssuer, createSessionTokenRefresher } from './oidcTokenRefresher';
@@ -379,6 +380,10 @@ const wipeNativeCryptoStore = async (session: Session): Promise<void> => {
   if (isAndroidTauri()) {
     await wipePushKeys(session.userId, session.deviceId).catch((error: unknown) =>
       log.warn('wipePushKeys failed', session.userId, error)
+    );
+    // Kolpak: the notification device goes with the account (notifyDevice.ts).
+    await disableNotifyDevice(session.userId).catch((error: unknown) =>
+      log.warn('disableNotifyDevice failed', session.userId, error)
     );
   }
 };

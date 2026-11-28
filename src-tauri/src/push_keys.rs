@@ -116,6 +116,9 @@ pub struct PushStatus {
     pub at: u64,
     pub ok: bool,
     pub error: Option<String>,
+    /// "copy" (the app's copy of its keys) or "device" (the notification device).
+    #[serde(default)]
+    pub via: Option<String>,
 }
 
 /// What the app (the webview) reported about itself: whether it runs at all while in the
@@ -401,8 +404,8 @@ async fn check(
     room_id: &str,
     event_json: &str,
 ) -> PushKeysCheck {
-    match decrypt(base, user_id, device_id, room_id, event_json).await {
-        Ok(clear) => PushKeysCheck {
+    match decrypt_any(base, user_id, device_id, room_id, event_json).await {
+        Ok((clear, _)) => PushKeysCheck {
             ok: true,
             body: serde_json::from_str::<serde_json::Value>(&clear)
                 .ok()
@@ -463,6 +466,27 @@ async fn decrypt(
 }
 
 /// Decrypt for the push path and remember how it went.
+/// The copy of the app's keys first (local and quick), then the notification device, which
+/// fetches a missing key itself (src/notify_device.rs). Says which one did it.
+pub(crate) async fn decrypt_any(
+    base: &Path,
+    user_id: &str,
+    device_id: &str,
+    room_id: &str,
+    event_json: &str,
+) -> Result<(String, &'static str), String> {
+    let copy_error = match decrypt(base, user_id, device_id, room_id, event_json).await {
+        Ok(clear) => return Ok((clear, "copy")),
+        Err(error) => error,
+    };
+    match crate::notify_device::decrypt_event(base, user_id, room_id, event_json).await {
+        Ok(clear) => Ok((clear, "device")),
+        Err(device_error) => Err(format!(
+            "{copy_error} (notification device: {device_error})"
+        )),
+    }
+}
+
 async fn decrypt_push(
     base: &Path,
     user_id: &str,
@@ -470,11 +494,12 @@ async fn decrypt_push(
     room_id: &str,
     event_json: &str,
 ) -> Option<String> {
-    let result = decrypt(base, user_id, device_id, room_id, event_json).await;
+    let result = decrypt_any(base, user_id, device_id, room_id, event_json).await;
     let push = PushStatus {
         at: now_ms(),
         ok: result.is_ok(),
         error: result.as_ref().err().cloned(),
+        via: result.as_ref().ok().map(|(_, via)| (*via).to_owned()),
     };
     if let Err(error) = &result {
         log::info!("push could not be decrypted: {error}");
@@ -482,7 +507,7 @@ async fn decrypt_push(
     update_status(&mirror_dir(base, user_id, device_id), |status| {
         status.last_push = Some(push)
     });
-    result.ok()
+    result.ok().map(|(clear, _)| clear)
 }
 
 /// `PushPayloadDecryptor.nativeDecryptPush` in the notifications plugin
