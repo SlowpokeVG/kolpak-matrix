@@ -119,10 +119,12 @@
   --sable-crit-container-line: var(--kolpak-orange);
   --sable-crit-on-container: var(--kolpak-orange);
 
-  /* Focus is a solid orange outline; no shadows; the modal overlay is opaque. */
+  /* Focus is a solid orange outline; no shadows. The overlay under dialogs and sheets dims
+     the page instead of hiding it (it was opaque; the owner wants the messages to stay in
+     view behind a sheet). */
   --sable-focus-ring: var(--kolpak-orange);
   --sable-shadow: transparent;
-  --sable-overlay: var(--kolpak-black);
+  --sable-overlay: color-mix(in srgb, var(--kolpak-black) 62%, transparent);
 
   --tc-link: var(--kolpak-orange);
 
