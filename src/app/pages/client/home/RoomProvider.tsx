@@ -11,7 +11,7 @@ import { useSetting } from '$state/hooks/settings';
 import { settingsAtom } from '$state/settings';
 import { useAtomValue } from 'jotai';
 import { mDirectAtom } from '$state/mDirectList';
-import { useSimpleMode } from '../../../../kolpak/simple/simpleMode';
+import { useShlomo } from '../../../../kolpak/simple/simpleMode';
 
 export function HomeRouteRoomProvider({
   roomIdOrAlias: roomIdOrAliasProp,
@@ -26,7 +26,7 @@ export function HomeRouteRoomProvider({
   const [isShowingAllRoomsInHome] = useSetting(settingsAtom, 'isShowingAllRoomsInHome');
   // Kolpak: simple mode opens every chat from the home list, direct chats included, so back
   // leads to that one list.
-  const simple = useSimpleMode().enabled;
+  const simple = useShlomo('oneList');
   const mDirects = useAtomValue(mDirectAtom);
   const rooms = useHomeRooms(false, simple);
 

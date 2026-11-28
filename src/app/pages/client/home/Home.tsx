@@ -68,7 +68,7 @@ import { useClientConfig } from '$hooks/useClientConfig';
 import { getMxIdServer } from '$utils/mxIdHelper';
 import { NavMenu } from '$components/nav/NavMenu';
 import { useMenuAnchor } from '$hooks/useMenuAnchor';
-import { useSimpleMode } from '../../../../kolpak/simple/simpleMode';
+import { useShlomo } from '../../../../kolpak/simple/simpleMode';
 
 type HomeMenuProps = {
   requestClose: () => void;
@@ -165,8 +165,8 @@ export function Home() {
   const clientConfig = useClientConfig();
   const scrollRef = useRef<HTMLDivElement>(null);
   const [isShowingAllRoomsInHome] = useSetting(settingsAtom, 'isShowingAllRoomsInHome');
-  // Kolpak: simple mode lists every chat here (useHomeRooms).
-  const simple = useSimpleMode().enabled;
+  // Kolpak: Shlomo mode's one list puts every chat here (useHomeRooms).
+  const simple = useShlomo('oneList');
   const rooms = useHomeRooms(isShowingAllRoomsInHome, simple);
   const mDirects = useAtomValue(mDirectAtom);
   const notificationPreferences = useRoomsNotificationPreferencesContext();

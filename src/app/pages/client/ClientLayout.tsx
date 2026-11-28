@@ -10,6 +10,7 @@ import { useTheater } from '../../../kolpak/theater/theaterStore';
 import { ClientStatusBar } from '../../../kolpak/layout/ClientStatusBar';
 import { LiveSheet, MobileLiveBar } from '../../../kolpak/mobile/MobileLive';
 import { SimpleMainRoom } from '../../../kolpak/simple/SimpleMainRoom';
+import { ShlomoLookSync } from '../../../kolpak/simple/ShlomoLookSync';
 import { PipStage } from '../../../kolpak/streams/PipStage';
 import { isAndroidTauri, isMobileTauri } from '$utils/platform';
 
@@ -53,6 +54,7 @@ export function ClientLayout({ nav, children }: ClientLayoutProps) {
       {mobileLive && <LiveSheet />}
       {mobileLive && theaterOpen && <Theater stacked />}
       <SimpleMainRoom />
+      <ShlomoLookSync />
       {isAndroidTauri() && <PipStage />}
     </Box>
   );

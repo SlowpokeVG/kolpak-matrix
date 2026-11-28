@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import type { MatrixClient, Room } from '$types/matrix-sdk';
 import { resolveMainRoom } from './mainRoom';
-import { sanitizeSimpleMode } from './simpleMode';
+import { partOn, sanitizeSimpleMode } from './simpleMode';
 
 const room = (roomId: string, members: number, { space = false, membership = 'join' } = {}) =>
   ({
@@ -34,12 +34,39 @@ describe('resolveMainRoom', () => {
 });
 
 describe('sanitizeSimpleMode', () => {
-  it('keeps good fields and drops the rest', () => {
-    expect(sanitizeSimpleMode({ enabled: true, mainRoomId: '!a', junk: 1 })).toEqual({
+  const allParts = {
+    look: true,
+    roomPreviews: true,
+    oneList: true,
+    noSpaceRail: true,
+    twoTabs: true,
+    fewerSettings: true,
+    openMainRoom: true,
+  };
+
+  it('is on, with every part, when nothing is stored', () => {
+    expect(sanitizeSimpleMode(undefined)).toEqual({
       enabled: true,
+      parts: allParts,
+      mainRoomId: '',
+    });
+    expect(sanitizeSimpleMode('nope')).toEqual({ enabled: true, parts: allParts, mainRoomId: '' });
+  });
+
+  it('keeps good fields and drops the rest', () => {
+    expect(
+      sanitizeSimpleMode({
+        enabled: false,
+        mainRoomId: '!a',
+        parts: { look: false, twoTabs: 'yes', junk: true },
+        junk: 1,
+      })
+    ).toEqual({
+      enabled: false,
+      parts: { ...allParts, look: false },
       mainRoomId: '!a',
     });
-    expect(sanitizeSimpleMode('nope')).toEqual({ enabled: false, mainRoomId: '' });
+    expect(sanitizeSimpleMode({ enabled: 'yes' }).enabled).toBe(false);
     expect(
       sanitizeSimpleMode({
         before: {
@@ -50,5 +77,12 @@ describe('sanitizeSimpleMode', () => {
         },
       }).before?.messageLayout
     ).toBe(0);
+  });
+
+  it('keeps a part off only while the master switch is on', () => {
+    const state = sanitizeSimpleMode({ parts: { oneList: false } });
+    expect(partOn(state, 'oneList')).toBe(false);
+    expect(partOn(state, 'look')).toBe(true);
+    expect(partOn({ ...state, enabled: false }, 'look')).toBe(false);
   });
 });

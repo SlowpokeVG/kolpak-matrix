@@ -1,8 +1,9 @@
 /*
- * Simple mode (simpleMode.ts): the Kolpak colours with a messenger's reading comfort. The
- * system's own sans-serif (Roboto on Android, Segoe UI on Windows) for text and titles,
- * code stays monospaced; room rows with avatars, the last message and its time.
- * Unlayered like kolpak-theme.css, whose rules these override; <html> carries the class.
+ * Shlomo mode (simpleMode.ts): the Kolpak colours with a messenger's reading comfort. The
+ * look (`kolpak-simple`): the system's own sans-serif (Roboto on Android, Segoe UI on
+ * Windows) for text and titles, code stays monospaced. The room previews
+ * (`kolpak-simple-rows`): room rows with avatars, the last message and its time.
+ * Unlayered like kolpak-theme.css, whose rules these override; <html> carries the classes.
  */
 
 html.kolpak-simple body.kolpak-theme {
@@ -35,11 +36,11 @@ html.kolpak-simple
 }
 
 /* Room rows: 64px, avatar, two lines. */
-html.kolpak-simple .kolpak-theme .kolpak-nav-item:not([data-collapsed]) {
+html.kolpak-simple-rows .kolpak-theme .kolpak-nav-item:not([data-collapsed]) {
   min-height: 64px;
   height: auto;
 }
-html.kolpak-simple
+html.kolpak-simple-rows
   .kolpak-theme
   .kolpak-nav-item[data-kolpak-row='room']:not([data-collapsed])
   .kolpak-nav-avatar {
@@ -70,12 +71,12 @@ html.kolpak-simple
   white-space: nowrap;
 }
 
-html.kolpak-simple .kolpak-theme .kolpak-nav-item[data-kolpak-row] .kolpak-simple-row__name {
+html.kolpak-simple-rows .kolpak-theme .kolpak-nav-item[data-kolpak-row] .kolpak-simple-row__name {
   flex: 1 1 auto;
   font-size: 15px;
   font-weight: 500;
 }
-html.kolpak-simple
+html.kolpak-simple-rows
   .kolpak-theme
   .kolpak-nav-item[data-kolpak-row]
   .kolpak-simple-row[data-strong='true']
@@ -96,7 +97,13 @@ html.kolpak-simple
 }
 
 /* The selected row is a paper block; keep its second line readable on it. */
-html.kolpak-simple .kolpak-theme .kolpak-nav-item[aria-selected='true'] .kolpak-simple-row__line,
-html.kolpak-simple .kolpak-theme .kolpak-nav-item[aria-selected='true'] .kolpak-simple-row__time {
+html.kolpak-simple-rows
+  .kolpak-theme
+  .kolpak-nav-item[aria-selected='true']
+  .kolpak-simple-row__line,
+html.kolpak-simple-rows
+  .kolpak-theme
+  .kolpak-nav-item[aria-selected='true']
+  .kolpak-simple-row__time {
   color: var(--kolpak-dim, inherit);
 }

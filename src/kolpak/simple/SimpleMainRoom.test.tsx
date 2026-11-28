@@ -3,6 +3,7 @@ import { createStore, Provider } from 'jotai';
 import { MemoryRouter, useLocation } from 'react-router';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import type { MatrixClient, Room } from '$types/matrix-sdk';
+import type * as SimpleMode from './simpleMode';
 
 const rooms: Room[] = [];
 const mx = {
@@ -11,7 +12,10 @@ const mx = {
 } as unknown as MatrixClient;
 
 vi.mock('$hooks/useMatrixClient', () => ({ useMatrixClient: () => mx }));
-vi.mock('./simpleMode', () => ({ getSimpleMode: () => ({ enabled: true, mainRoomId: '' }) }));
+vi.mock('./simpleMode', async (importOriginal) => {
+  const actual = await importOriginal<typeof SimpleMode>();
+  return { ...actual, getSimpleMode: () => actual.sanitizeSimpleMode({}) };
+});
 
 const room = (roomId: string, members: number) =>
   ({

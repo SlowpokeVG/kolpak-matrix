@@ -12,7 +12,7 @@ import { NavigateTab } from './sidebar/NavigateTab';
 import { SettingsTab } from './sidebar/SettingsTab';
 import { useScreenSizeContext, ScreenSize } from '$hooks/useScreenSize';
 import { UserMenuTab } from './sidebar/UserMenuTab';
-import { useSimpleMode } from '../../../kolpak/simple/simpleMode';
+import { useShlomo } from '../../../kolpak/simple/simpleMode';
 
 export function SidebarNav() {
   const scrollRef = useRef<HTMLDivElement>(null);
@@ -27,9 +27,9 @@ export function SidebarNav() {
   const [oldSidebar] = useSetting(settingsAtom, 'oldSidebar');
   const screenSize = useScreenSizeContext();
   const compact = screenSize === ScreenSize.Mobile;
-  // Kolpak: on a phone, simple mode has no column of spaces: one list of chats (Home) and the
-  // bar along the bottom for the rest.
-  const simple = useSimpleMode().enabled;
+  // Kolpak: on a phone, Shlomo mode can drop the column of spaces: one list of chats (Home)
+  // and the bar along the bottom for the rest.
+  const simple = useShlomo('noSpaceRail');
 
   const width = roomSidebarWidth + 66;
   const isCollapsed = compact ? false : width < 190 + 66;

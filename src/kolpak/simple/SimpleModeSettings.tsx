@@ -3,31 +3,16 @@ import { Box, Text } from 'folds';
 import { SequenceCard, SequenceCardStyle } from '$components/sequence-card';
 import { SettingTile, SettingToggle } from '$components/setting-tile';
 import { useMatrixClient } from '$hooks/useMatrixClient';
-import { useSetting } from '$state/hooks/settings';
-import { MessageLayout, settingsAtom } from '$state/settings';
 import { chatRooms } from './mainRoom';
-import { updateSimpleMode, useSimpleMode } from './simpleMode';
+import { SHLOMO_PARTS, setShlomoPart, updateSimpleMode, useSimpleMode } from './simpleMode';
 import '../voice/voice-settings.css';
 
-// Settings → General, first card: the simple-mode switch and the main room.
-//
-// Turning it on also sets four of Sable's own settings the way a messenger looks (bubbles,
-// yours on the right, no join/leave or name-change lines) and remembers how they were, so
-// turning it off puts them back. They stay changeable in Appearance while it is on.
+// Settings → General, first card: Shlomo mode, its master switch, a switch per part and the
+// main room. The look's Sable settings follow in ShlomoLookSync.
 
 export function SimpleModeSettings() {
   const mx = useMatrixClient();
   const simple = useSimpleMode();
-  const [messageLayout, setMessageLayout] = useSetting(settingsAtom, 'messageLayout');
-  const [useRightBubbles, setUseRightBubbles] = useSetting(settingsAtom, 'useRightBubbles');
-  const [hideMembershipEvents, setHideMembershipEvents] = useSetting(
-    settingsAtom,
-    'hideMembershipEvents'
-  );
-  const [hideNickAvatarEvents, setHideNickAvatarEvents] = useSetting(
-    settingsAtom,
-    'hideNickAvatarEvents'
-  );
 
   const rooms = useMemo(
     () =>
@@ -38,63 +23,56 @@ export function SimpleModeSettings() {
     [mx]
   );
 
-  const toggle = (enabled: boolean) => {
-    if (enabled) {
-      updateSimpleMode({
-        enabled: true,
-        before: { messageLayout, useRightBubbles, hideMembershipEvents, hideNickAvatarEvents },
-      });
-      setMessageLayout(MessageLayout.Bubble);
-      setUseRightBubbles(true);
-      setHideMembershipEvents(true);
-      setHideNickAvatarEvents(true);
-      return;
-    }
-    const { before } = simple;
-    updateSimpleMode({ enabled: false, before: undefined });
-    if (before) {
-      setMessageLayout(before.messageLayout);
-      setUseRightBubbles(before.useRightBubbles);
-      setHideMembershipEvents(before.hideMembershipEvents);
-      setHideNickAvatarEvents(before.hideNickAvatarEvents);
-    }
-  };
-
   return (
     <Box direction="Column" gap="100">
       <Text size="L400">Kolpak</Text>
       <SequenceCard className={SequenceCardStyle} variant="SurfaceVariant" direction="Column">
         <SettingToggle
-          title="Simple mode"
+          title="Shlomo mode"
           focusId="kolpak-simple-mode"
-          description="Everyday layout: a messenger-style room list with the last message, chat bubbles in a plain font, only the settings you need, and your main room opens when Kolpak starts."
+          description="The everyday layout, like a messenger. Each part below can be switched on its own."
           value={simple.enabled}
-          onChange={toggle}
+          onChange={(enabled) => updateSimpleMode({ enabled })}
           ariaLabel="kolpak-simple-mode"
         />
-        {simple.enabled && (
-          <SettingTile
-            title="Main room"
-            focusId="kolpak-main-room"
-            description="Opens when Kolpak starts."
-            after={
-              <select
-                className="kolpak-select"
-                aria-label="Main room"
-                value={simple.mainRoomId}
-                onChange={(event) => updateSimpleMode({ mainRoomId: event.target.value })}
-              >
-                <option value="">The busiest room</option>
-                {rooms.map((room) => (
-                  <option key={room.id} value={room.id}>
-                    {room.name} ({room.members})
-                  </option>
-                ))}
-              </select>
-            }
-          />
-        )}
       </SequenceCard>
+      {simple.enabled && (
+        <SequenceCard className={SequenceCardStyle} variant="SurfaceVariant" direction="Column">
+          {SHLOMO_PARTS.map((part) => (
+            <SettingToggle
+              key={part.id}
+              title={part.title}
+              focusId={`kolpak-shlomo-${part.id}`}
+              description={part.description}
+              value={simple.parts[part.id]}
+              onChange={(on) => setShlomoPart(part.id, on)}
+              ariaLabel={`kolpak-shlomo-${part.id}`}
+            />
+          ))}
+          {simple.parts.openMainRoom && (
+            <SettingTile
+              title="Main room"
+              focusId="kolpak-main-room"
+              description="Opens when Kolpak starts."
+              after={
+                <select
+                  className="kolpak-select"
+                  aria-label="Main room"
+                  value={simple.mainRoomId}
+                  onChange={(event) => updateSimpleMode({ mainRoomId: event.target.value })}
+                >
+                  <option value="">The busiest room</option>
+                  {rooms.map((room) => (
+                    <option key={room.id} value={room.id}>
+                      {room.name} ({room.members})
+                    </option>
+                  ))}
+                </select>
+              }
+            />
+          )}
+        </SequenceCard>
+      )}
     </Box>
   );
 }

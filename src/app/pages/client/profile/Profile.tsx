@@ -1,5 +1,6 @@
-import { Box, Text, color, config, Menu, Line, MenuItem } from 'folds';
-import { GearSix, menuIcon } from '$components/icons/phosphor';
+import { Badge, Box, Text, color, config, Menu, Line, MenuItem } from 'folds';
+import { useNavigate } from 'react-router';
+import { GearSix, menuIcon, Tray } from '$components/icons/phosphor';
 import { PageNavHeader } from '$components/page';
 import { SidebarPanel } from '$components/page/SidebarPanel';
 import { ScreenSize, useScreenSizeContext } from '$hooks/useScreenSize';
@@ -15,10 +16,61 @@ import { useMediaAuthentication } from '$hooks/useMediaAuthentication';
 import { useUserPresence } from '$hooks/useUserPresence';
 import { useUserProfile } from '$hooks/useUserProfile';
 import { useOpenSettings } from '$features/settings';
-import { PencilSimpleIcon, SignOutIcon } from '@phosphor-icons/react';
+import { ListMagnifyingGlassIcon, PencilSimpleIcon, SignOutIcon } from '@phosphor-icons/react';
 import { UseStateProvider } from '$components/UseStateProvider';
 import { LogoutDialogOverlay } from '$components/LogoutDialogOverlay';
 import { getMxIdServer } from '$utils/mxIdHelper';
+import { useInviteCount } from '$hooks/useInviteCount';
+import { useInboxNotificationCount } from '$hooks/useInboxNotificationCount';
+import { getInboxPath, getNavigatePath } from '$pages/pathUtils';
+import { useOpenShallowRoute } from '$pages/client/useShallowRoute';
+import { useShlomo } from '../../../../kolpak/simple/simpleMode';
+
+// Kolpak: with Shlomo mode's two tabs (ShlomoSettingsTab) this page is the phone's Settings
+// tab: the inbox and search on top, then the account as before.
+function ShlomoHubRows() {
+  const navigate = useNavigate();
+  const openShallowRoute = useOpenShallowRoute();
+  const inbox = useInviteCount() + useInboxNotificationCount();
+  return (
+    <>
+      <Box direction="Column" gap="100" style={{ padding: config.space.S100 }}>
+        <MenuItem
+          size="400"
+          radii="300"
+          before={menuIcon(Tray)}
+          after={
+            inbox > 0 ? (
+              <Badge variant="Success" size="400" fill="Solid" radii="Pill">
+                <Text as="span" size="L400">
+                  {inbox}
+                </Text>
+              </Badge>
+            ) : undefined
+          }
+          onClick={() => navigate(getInboxPath())}
+          style={{ background: color.Background.Container }}
+        >
+          <Text style={{ flexGrow: 1 }} size="T300">
+            Inbox
+          </Text>
+        </MenuItem>
+        <MenuItem
+          size="400"
+          radii="300"
+          before={menuIcon(ListMagnifyingGlassIcon)}
+          onClick={() => openShallowRoute(getNavigatePath())}
+          style={{ background: color.Background.Container }}
+        >
+          <Text style={{ flexGrow: 1 }} size="T300">
+            Search rooms and people
+          </Text>
+        </MenuItem>
+      </Box>
+      <Line variant="Surface" size="300" />
+    </>
+  );
+}
 
 export function ProfileMobile() {
   const mx = useMatrixClient();
@@ -42,6 +94,7 @@ export function ProfileMobile() {
     : undefined;
 
   const isMobile = useScreenSizeContext() === ScreenSize.Mobile;
+  const hub = useShlomo('twoTabs') && isMobile;
 
   return (
     <>
@@ -60,7 +113,7 @@ export function ProfileMobile() {
         <PageNavHeader size="600" style={{ width: '100%' }}>
           <Box grow="Yes" alignItems="Center" style={{ position: 'relative' }}>
             <Text size="H4" align="Center" truncate style={{ width: '100%' }}>
-              Account
+              {hub ? 'Settings' : 'Account'}
             </Text>
           </Box>
         </PageNavHeader>
@@ -73,6 +126,7 @@ export function ProfileMobile() {
             background: color.Background.Container,
           }}
         >
+          {hub && <ShlomoHubRows />}
           <Box direction="Column" gap="200">
             <UserHero
               userId={userId}

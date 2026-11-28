@@ -70,7 +70,7 @@ import { useClientConfig } from '$hooks/useClientConfig';
 import { getGifProvider, getGifProviderOptions } from '$utils/gifProviders';
 import { CallSoundSettings } from './CallSoundSettings';
 import { SimpleModeSettings } from '../../../../kolpak/simple/SimpleModeSettings';
-import { useSimpleMode } from '../../../../kolpak/simple/simpleMode';
+import { useShlomo } from '../../../../kolpak/simple/simpleMode';
 
 type DateHintProps = {
   hasChanges: boolean;
@@ -1579,8 +1579,8 @@ function DiagnosticsAndPrivacy() {
 }
 
 export function General({ requestBack, requestClose }: Readonly<GeneralProps>) {
-  // Kolpak: the simple-mode card first; simple mode hides the sections it has no use for.
-  const simple = useSimpleMode().enabled;
+  // Kolpak: the Shlomo mode card first; its fewer settings hide the sections it has no use for.
+  const simple = useShlomo('fewerSettings');
   return (
     <SettingsSectionPage title="General" requestBack={requestBack} requestClose={requestClose}>
       <Box grow="Yes">

@@ -57,7 +57,7 @@ import {
   roomNotificationModeIcon,
 } from '$hooks/useRoomsNotificationPreferences';
 import { RoomNotificationModeSwitcher } from '$components/RoomNotificationSwitcher';
-import { useSimpleMode } from '../../../kolpak/simple/simpleMode';
+import { useShlomo } from '../../../kolpak/simple/simpleMode';
 import { SimpleRoomText } from '../../../kolpak/simple/SimpleRoomText';
 
 import { InviteUserPrompt } from '$components/invite-user-prompt';
@@ -320,8 +320,9 @@ export function RoomNavItem({
   isStrict,
   joinCallOnSingleClick,
 }: RoomNavItemProps) {
-  // Kolpak: simple mode shows every room's avatar and a messenger-style second line.
-  const simple = useSimpleMode().enabled;
+  // Kolpak: Shlomo mode's room previews show every room's avatar and a messenger-style
+  // second line.
+  const simple = useShlomo('roomPreviews');
   const mx = useMatrixClient();
   const useAuthentication = useMediaAuthentication();
   const [hover, setHover] = useState(false);
