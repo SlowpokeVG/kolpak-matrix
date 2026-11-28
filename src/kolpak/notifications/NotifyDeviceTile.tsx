@@ -57,7 +57,9 @@ export function NotifyDeviceTile() {
       );
     } else if (result.needsPassword && !withPassword) {
       setAskPassword(true);
-      setMessage('Your server wants the account password for this.');
+      setMessage(
+        'Your server signs devices in with the account password only. Enter it once below.'
+      );
     } else {
       setMessage(`Could not sign in: ${result.error}`);
     }
@@ -111,26 +113,50 @@ export function NotifyDeviceTile() {
           <span>{status === undefined ? 'Reading…' : state}</span>
           {message && <span>{message}</span>}
           {askPassword && !status && (
-            <Box as="form" onSubmit={onSubmit} gap="200" alignItems="Center" wrap="Wrap">
+            <Box as="form" onSubmit={onSubmit} direction="Column" gap="200">
+              <Text size="L400">Account password (the one you sign in to Kolpak with)</Text>
               <Input
                 type="password"
+                name="password"
                 autoComplete="current-password"
-                placeholder="Account password"
+                autoCapitalize="off"
+                autoCorrect="off"
+                spellCheck={false}
+                autoFocus
+                placeholder="Password"
                 value={password}
                 onChange={(event) => setPassword(event.currentTarget.value)}
-                size="300"
+                size="400"
                 variant="Background"
                 radii="300"
+                style={{ width: '100%' }}
               />
-              <Button
-                size="300"
-                variant="Primary"
-                radii="300"
-                type="submit"
-                disabled={busy || !password}
-              >
-                <Text size="B300">Sign in</Text>
-              </Button>
+              <Box gap="200" alignItems="Center">
+                <Button
+                  size="300"
+                  variant="Primary"
+                  radii="300"
+                  type="submit"
+                  disabled={busy || !password}
+                >
+                  <Text size="B300">Sign in</Text>
+                </Button>
+                <Button
+                  size="300"
+                  variant="Secondary"
+                  fill="Soft"
+                  radii="300"
+                  type="button"
+                  disabled={busy}
+                  onClick={() => {
+                    setAskPassword(false);
+                    setPassword('');
+                    setMessage(undefined);
+                  }}
+                >
+                  <Text size="B300">Cancel</Text>
+                </Button>
+              </Box>
             </Box>
           )}
           <Box gap="200" alignItems="Center" wrap="Wrap">
