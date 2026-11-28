@@ -26,8 +26,15 @@ export function ShlomoLookSync() {
 
   useEffect(() => {
     if (look && !before) {
+      // Coerced, so the snapshot always passes the mode's check: one that failed it would be
+      // dropped, leave `before` empty and apply again on every render.
       updateSimpleMode({
-        before: { messageLayout, useRightBubbles, hideMembershipEvents, hideNickAvatarEvents },
+        before: {
+          messageLayout: typeof messageLayout === 'number' ? messageLayout : MessageLayout.Modern,
+          useRightBubbles: useRightBubbles === true,
+          hideMembershipEvents: hideMembershipEvents === true,
+          hideNickAvatarEvents: hideNickAvatarEvents === true,
+        },
       });
       setMessageLayout(MessageLayout.Bubble);
       setUseRightBubbles(true);

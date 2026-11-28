@@ -77,6 +77,22 @@ describe('ShlomoLookSync', () => {
     );
     expect(store.get(settingsAtom).messageLayout).toBe(MessageLayout.Modern);
   });
+  it('settles even when a stored Sable setting has a broken value', async () => {
+    const { ShlomoLookSync } = await import('./ShlomoLookSync');
+    const mode = await import('./simpleMode');
+    const { store, settingsAtom } = await modernStore();
+    store.set(settingsAtom, {
+      ...store.get(settingsAtom),
+      messageLayout: undefined as unknown as MessageLayout,
+    });
+    render(
+      <Provider store={store}>
+        <ShlomoLookSync />
+      </Provider>
+    );
+    expect(mode.getSimpleMode().before?.messageLayout).toBe(MessageLayout.Modern);
+    expect(store.get(settingsAtom).messageLayout).toBe(MessageLayout.Bubble);
+  });
 });
 
 describe('MobileFriendlyBottomNav', () => {
