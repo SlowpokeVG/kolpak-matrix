@@ -847,7 +847,7 @@ async fn promote_staging_file(
             let _ = fs::remove_file(&target_body);
             return false;
         }
-        evict_directory_if_needed(&target_dir, max_bytes);
+        evict_directory_if_due(&target_dir, max_bytes);
         target_body.is_file()
     })
     .await
@@ -915,7 +915,7 @@ async fn write_cache(
         if fs::create_dir_all(&dir).is_ok() {
             let res_body = fs::write(&body_path, &body);
             let res_ct = fs::write(&content_type_path, &content_type);
-            evict_directory_if_needed(&dir, max_bytes);
+            evict_directory_if_due(&dir, max_bytes);
             res_body.is_ok() && res_ct.is_ok() && body_path.is_file()
         } else {
             false
@@ -987,6 +987,31 @@ async fn sniff_and_fix_content_type(
     })
     .await
     .unwrap_or(stored_ct)
+}
+
+/// Kolpak: at most one scan a minute per directory. Every cache write used to stat every
+/// file in the 512 MB cache, which made scrolling through media O(files) per thumbnail; the
+/// budget can now be exceeded by a minute's writes at most.
+fn evict_directory_if_due(dir: &Path, max_bytes: u64) {
+    static LAST_SCAN: std::sync::OnceLock<
+        std::sync::Mutex<std::collections::HashMap<PathBuf, std::time::Instant>>,
+    > = std::sync::OnceLock::new();
+    const MIN_GAP: std::time::Duration = std::time::Duration::from_secs(60);
+    let now = std::time::Instant::now();
+    {
+        let mut last = LAST_SCAN
+            .get_or_init(Default::default)
+            .lock()
+            .unwrap_or_else(|poison| poison.into_inner());
+        if last
+            .get(dir)
+            .is_some_and(|at| now.duration_since(*at) < MIN_GAP)
+        {
+            return;
+        }
+        last.insert(dir.to_path_buf(), now);
+    }
+    evict_directory_if_needed(dir, max_bytes);
 }
 
 // Trim oldest-first when the cache exceeds its byte budget.

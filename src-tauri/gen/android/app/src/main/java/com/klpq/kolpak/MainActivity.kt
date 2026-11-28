@@ -330,10 +330,12 @@ class MainActivity : TauriActivity() {
       }
     }
 
+    // Kolpak: stopping must not depend on the activity: it used to throw once the activity
+    // was gone, leaving the call service up with its notification, audio focus and wake lock.
     @JvmStatic
     fun stopCallForegroundServiceNative() {
-      val activity = checkNotNull(instance) { "MainActivity is unavailable" }
-      activity.stopService(Intent(activity, CallForegroundService::class.java))
+      val context = instance ?: appContext ?: return
+      context.stopService(Intent(context, CallForegroundService::class.java))
     }
 
     private fun isLight(color: Int): Boolean {

@@ -60,6 +60,13 @@ class CallForegroundService : Service() {
     return START_NOT_STICKY
   }
 
+  // Kolpak: the call lives in the WebView; with the app swiped away it is gone, and so must
+  // be this service, its notification, audio focus and wake lock.
+  override fun onTaskRemoved(rootIntent: android.content.Intent?) {
+    stopSelf()
+    super.onTaskRemoved(rootIntent)
+  }
+
   override fun onDestroy() {
     releaseAudioFocus()
     releaseWakeLock()
