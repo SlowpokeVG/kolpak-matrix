@@ -73,6 +73,8 @@ class VoiceService : Service() {
 
   override fun onDestroy() {
     if (running === this) running = null
+    // The next session starts muted; the microphone says otherwise when it opens.
+    transmitting = false
     releaseLocks()
     ServiceCompat.stopForeground(this, ServiceCompat.STOP_FOREGROUND_REMOVE)
     super.onDestroy()

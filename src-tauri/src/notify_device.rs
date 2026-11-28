@@ -96,7 +96,9 @@ fn http() -> &'static reqwest::Client {
     CLIENT.get_or_init(|| {
         reqwest::Client::builder()
             .connect_timeout(Duration::from_secs(10))
-            .timeout(Duration::from_secs(45))
+            // The push service waits for this on its own thread; a stuck request must not
+            // hold the next notifications for long.
+            .timeout(Duration::from_secs(25))
             .build()
             .unwrap_or_else(|_| reqwest::Client::new())
     })
@@ -210,13 +212,19 @@ async fn send_outgoing(machine: &OlmMachine, session: &Session) -> Result<(), St
     Ok(())
 }
 
+/// The server hands out to-device messages in batches (Synapse: 100 a sync); a full batch
+/// means more are waiting.
+const TO_DEVICE_BATCH: usize = 100;
+/// Batches fetched in one go when a backlog waits (the device was not synced for a while).
+const MAX_BACKLOG_ROUNDS: usize = 10;
+
 /// One sync of to-device messages, device lists and key counts, fed to the machine. Returns
-/// how many room keys came with it.
-async fn sync_once(device: &Device, timeout_ms: u64) -> Result<usize, String> {
+/// how many room keys and how many to-device messages came with it.
+async fn sync_once(device: &Device, timeout_ms: u64) -> Result<(usize, usize), String> {
     let mut session = device.session.lock().await;
     let result = sync_locked(device, &mut session, timeout_ms).await;
     match &result {
-        Ok(keys) => {
+        Ok((keys, _)) => {
             session.last_sync_at = Some(now_ms());
             session.last_error = None;
             session.keys_received += *keys as u64;
@@ -227,11 +235,23 @@ async fn sync_once(device: &Device, timeout_ms: u64) -> Result<usize, String> {
     result
 }
 
+/// Sync until the to-device backlog is drained (or `MAX_BACKLOG_ROUNDS`).
+async fn sync_backlog(device: &Device) -> Result<(), String> {
+    for _ in 0..MAX_BACKLOG_ROUNDS {
+        // Batches one after another on purpose.
+        let (_, messages) = sync_once(device, 0).await?;
+        if messages < TO_DEVICE_BATCH {
+            break;
+        }
+    }
+    Ok(())
+}
+
 async fn sync_locked(
     device: &Device,
     session: &mut Session,
     timeout_ms: u64,
-) -> Result<usize, String> {
+) -> Result<(usize, usize), String> {
     let mut query = vec![
         ("filter", SYNC_FILTER.to_owned()),
         ("timeout", timeout_ms.to_string()),
@@ -247,6 +267,7 @@ async fn sync_locked(
     }
     let sync: Value = serde_json::from_str(&body).map_err(|e| format!("sync: bad json: {e}"))?;
 
+    let to_device_count = sync["to_device"]["events"].as_array().map_or(0, Vec::len);
     let to_device_events: Vec<Raw<_>> = sync["to_device"]["events"]
         .as_array()
         .map(|events| {
@@ -311,7 +332,7 @@ async fn sync_locked(
         session.next_batch = next_batch;
     }
     send_outgoing(&device.machine, session).await?;
-    Ok(room_keys.len())
+    Ok((room_keys.len(), to_device_count))
 }
 
 fn decryption_settings() -> DecryptionSettings {
@@ -351,15 +372,23 @@ pub async fn decrypt_event(
     if let Ok(clear) = try_decrypt(&device.machine, room, &event).await {
         return Ok(clear);
     }
-    let mut last = String::new();
-    for timeout_ms in [0, 3000] {
-        sync_once(&device, timeout_ms).await?;
-        match try_decrypt(&device.machine, room, &event).await {
-            Ok(clear) => return Ok(clear),
-            Err(error) => last = error,
-        }
+    // Whatever is waiting first (a backlog if the device was not synced for a while), then
+    // once more giving a key still on its way a few seconds.
+    sync_backlog(&device).await?;
+    if let Ok(clear) = try_decrypt(&device.machine, room, &event).await {
+        return Ok(clear);
     }
-    Err(last)
+    sync_once(&device, 3000).await?;
+    try_decrypt(&device.machine, room, &event).await
+}
+
+/// A light sync while the app runs, so the device's to-device backlog stays short and its
+/// one-time keys stay topped up. Nothing to do without a device.
+pub async fn sync_now(base: &Path, user_id: &str) -> Result<(), String> {
+    match open_device(base, user_id).await? {
+        Some(device) => sync_backlog(&device).await,
+        None => Ok(()),
+    }
 }
 
 /// Sign the device in (with a password or a login token from the app's own session),
@@ -422,7 +451,7 @@ pub async fn login(
         let session = device.session.lock().await;
         send_outgoing(&device.machine, &session).await?;
     }
-    sync_once(&device, 0).await?;
+    sync_backlog(&device).await?;
     Ok(device_id.to_owned())
 }
 
@@ -488,6 +517,13 @@ pub async fn kolpak_notify_login(
 #[tauri::command]
 pub async fn kolpak_notify_logout(app: tauri::AppHandle, user_id: String) -> Result<(), String> {
     logout(&base_dir(&app)?, &user_id).await
+}
+
+/// A light sync of the notification device (none signed in: nothing).
+#[cfg(target_os = "android")]
+#[tauri::command]
+pub async fn kolpak_notify_sync(app: tauri::AppHandle, user_id: String) -> Result<(), String> {
+    sync_now(&base_dir(&app)?, &user_id).await
 }
 
 /// The notification device of an account, if one is signed in.
@@ -632,6 +668,8 @@ mod tests {
                 .unwrap();
         assert_eq!(via, "device");
 
+        sync_now(&base, &bob_id).await.unwrap();
+
         // A fresh process reads the same device from disk.
         devices().lock().unwrap().clear();
         assert!(decrypt_event(&base, &bob_id, room_id.as_str(), &event)
@@ -731,6 +769,104 @@ mod tests {
             .unwrap();
         let clear: Value = serde_json::from_str(&clear).unwrap();
         assert_eq!(clear["content"]["body"], "after the device");
+        logout(&base, &bob_id).await.unwrap();
+        let _ = std::fs::remove_dir_all(&base);
+    }
+
+    /// The device was not synced for a while: more than a server batch of to-device messages
+    /// waits ahead of the room key. Draining the backlog reaches it.
+    #[tokio::test]
+    #[ignore = "needs a homeserver with open registration"]
+    async fn decrypts_after_a_backlog_of_to_device_messages() {
+        let homeserver = std::env::var("KOLPAK_TEST_HOMESERVER").unwrap();
+        let tag = now_ms();
+        let (alice_name, bob_name, password) =
+            (format!("erin{tag}"), format!("frank{tag}"), "pass-word-1");
+        let alice_token = register(&homeserver, &alice_name, password).await;
+        let bob_token = register(&homeserver, &bob_name, password).await;
+        let host = homeserver
+            .trim_start_matches("http://")
+            .trim_start_matches("https://");
+        let server_name =
+            std::env::var("KOLPAK_TEST_SERVER_NAME").unwrap_or_else(|_| host.to_owned());
+        let bob_id = format!("@{bob_name}:{server_name}");
+        let base = std::env::temp_dir().join(format!("kolpak-notify-test3-{tag}"));
+        let device_id = login(&base, &homeserver, &bob_id, Some(password), None)
+            .await
+            .unwrap();
+
+        // 150 harmless to-device messages first.
+        for n in 0..150 {
+            let body = json!({ "messages": { &bob_id: { &device_id: { "n": n } } } });
+            let request = http()
+                .put(api(
+                    &homeserver,
+                    &format!("/sendToDevice/org.kolpak.test/txn{tag}{n}"),
+                ))
+                .header("Content-Type", "application/json")
+                .body(body.to_string());
+            assert_eq!(send(request, Some(&alice_token)).await.unwrap().0, 200);
+        }
+
+        let alice = matrix_sdk::Client::builder()
+            .homeserver_url(&homeserver)
+            .sqlite_store(base.join("alice"), None)
+            .build()
+            .await
+            .unwrap();
+        alice
+            .matrix_auth()
+            .login_username(&alice_name, password)
+            .send()
+            .await
+            .unwrap();
+        alice.sync_once(SyncSettings::default()).await.unwrap();
+        let mut create = CreateRoom::new();
+        create.invite = vec![UserId::parse(&bob_id).unwrap()];
+        create.initial_state = vec![InitialStateEvent::with_empty_state_key(
+            RoomEncryptionEventContent::with_recommended_defaults(),
+        )
+        .to_raw_any()];
+        let room = alice.create_room(create).await.unwrap();
+        let room_id = room.room_id().to_owned();
+        let join = http()
+            .post(api(
+                &homeserver,
+                &format!("/join/{}", urlencode(room_id.as_str())),
+            ))
+            .header("Content-Type", "application/json")
+            .body("{}");
+        assert_eq!(send(join, Some(&bob_token)).await.unwrap().0, 200);
+        alice.sync_once(SyncSettings::default()).await.unwrap();
+        let sent = room
+            .send(RoomMessageEventContent::text_plain("behind the backlog"))
+            .await
+            .unwrap();
+
+        let fetch = http().get(api(
+            &homeserver,
+            &format!(
+                "/rooms/{}/event/{}",
+                urlencode(room_id.as_str()),
+                urlencode(sent.response.event_id.as_str())
+            ),
+        ));
+        let (_, raw) = send(fetch, Some(&bob_token)).await.unwrap();
+        let raw: Value = serde_json::from_str(&raw).unwrap();
+        let event = json!({
+            "type": "m.room.encrypted",
+            "room_id": room_id.as_str(),
+            "content": raw["content"],
+            "event_id": raw["event_id"],
+            "sender": raw["sender"],
+            "origin_server_ts": now_ms(),
+        })
+        .to_string();
+        let clear = decrypt_event(&base, &bob_id, room_id.as_str(), &event)
+            .await
+            .unwrap();
+        let clear: Value = serde_json::from_str(&clear).unwrap();
+        assert_eq!(clear["content"]["body"], "behind the backlog");
         logout(&base, &bob_id).await.unwrap();
         let _ = std::fs::remove_dir_all(&base);
     }

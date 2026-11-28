@@ -575,6 +575,7 @@ Done overnight with the owner's go-ahead (no confirmations possible), following 
 - The status block says whether the last push was decrypted by the copy or by the device.
 - Tests: two end-to-end Rust tests against a local Synapse (`KOLPAK_TEST_HOMESERVER=http://127.0.0.1:8008 KOLPAK_TEST_SERVER_NAME=localhost cargo test notify_device -- --ignored`): a real matrix-sdk client (Alice) sends an encrypted message, the device fetches the key and decrypts it as a push would carry it — for a new conversation and for one whose Megolm session started before the device existed — and through the push service's chain. Vitest for the sign-in flow.
 - HTTPS from the push service uses tauri-plugin-http's reqwest 0.12 with bundled webpki roots, so a cold process (no app UI) needs no TLS initialization.
+- Review fixes before the build: the device drains a to-device backlog (Synapse hands out 100 a sync; up to 10 rounds; third end-to-end test with 150 messages queued ahead of the key), the app gives it a light sync with every key copy (`kolpak_notify_sync`), and its HTTP timeout is 25 s (it runs on the push service's thread). Voice: a failed microphone open is not retried on every state change for 10 s, and `VoiceService` forgets "transmitting" when a session ends.
 - Not done: stopping the webview's classic sync in the background. js-sdk can only stop sync with `stopClient()`, which also stops the crypto backend; to be designed separately once the diagnostics show whether the WebView runs in the background at all.
 
 ## Starting a new Claude session on this

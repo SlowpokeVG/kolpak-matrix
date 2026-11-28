@@ -11,6 +11,7 @@ const commands = vi.hoisted(() => ({
   kolpakPushKeysKnown: vi.fn<(params: unknown) => Promise<string[]>>(async () => ['old']),
   kolpakPushKeysCheck: vi.fn<(params: unknown) => Promise<unknown>>(),
   kolpakPushKeysAppReport: vi.fn<(params: unknown) => Promise<void>>(async () => undefined),
+  kolpakNotifySync: vi.fn<(params: unknown) => Promise<void>>(async () => undefined),
   kolpakPushKeysWipe: vi.fn<(params: unknown) => Promise<void>>(async () => undefined),
 }));
 vi.mock('$generated/tauri/commands', () => commands);

@@ -52,6 +52,9 @@ const EVENT_CAPTURE: &str = "audio://capture";
 const LEVELS_INTERVAL: Duration = Duration::from_millis(100);
 /// How often the push-to-talk key is read. 10 ms is half a voice frame.
 const PTT_POLL_INTERVAL: Duration = Duration::from_millis(10);
+/// Kolpak: after the microphone failed to open, state changes within this time do not try
+/// again (a mute toggle by the user still does, once the time is up).
+const CAPTURE_RETRY_AFTER: Duration = Duration::from_secs(10);
 /// Kolpak: how often the push-to-talk task looks again while push to talk is not in use.
 const PTT_IDLE_INTERVAL: Duration = Duration::from_millis(250);
 /// Kolpak: the output stream closes after this long with nobody talking, and opens again
@@ -160,6 +163,8 @@ struct AudioSession {
     controls: Arc<Controls>,
     sink: tokio::sync::mpsc::UnboundedSender<VoiceFrame>,
     capture: Option<Capture>,
+    /// When the microphone last failed to open; a state change soon after does not retry.
+    capture_failed_at: Option<Instant>,
 }
 
 #[derive(Default)]
@@ -370,6 +375,7 @@ async fn start_audio<R: Runtime>(
             controls: controls.clone(),
             sink: frame_tx,
             capture: None,
+            capture_failed_at: None,
         });
     }
 
@@ -460,6 +466,13 @@ async fn sync_capture<R: Runtime>(app: AppHandle<R>, inner: Arc<Mutex<Inner>>, g
         if want == audio.capture.is_some() {
             return;
         }
+        if want
+            && audio
+                .capture_failed_at
+                .is_some_and(|at| at.elapsed() < CAPTURE_RETRY_AFTER)
+        {
+            return;
+        }
         if !want {
             let capture = audio.capture.take();
             drop(guard);
@@ -507,6 +520,7 @@ async fn sync_capture<R: Runtime>(app: AppHandle<R>, inner: Arc<Mutex<Inner>>, g
             guard.full.capture.error = error;
             let payload = Some(guard.full.capture.clone());
             let audio = guard.audio.as_mut().expect("checked above");
+            audio.capture_failed_at = capture.is_none().then(Instant::now);
             if muted || audio.capture.is_some() {
                 // Muted again while it opened, or another call got there first.
                 (capture, payload)

@@ -554,6 +554,8 @@ pub fn run() {
             notify_device::kolpak_notify_logout,
             #[cfg(all(target_os = "android", feature = "matrix-crypto"))]
             notify_device::kolpak_notify_status,
+            #[cfg(all(target_os = "android", feature = "matrix-crypto"))]
+            notify_device::kolpak_notify_sync,
             #[cfg(target_os = "ios")]
             ios::haptic_feedback,
             #[cfg(target_os = "ios")]

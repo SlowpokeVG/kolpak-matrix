@@ -5,6 +5,7 @@ import {
   kolpakPushKeysImport,
   kolpakPushKeysKnown,
   kolpakPushKeysWipe,
+  kolpakNotifySync,
 } from '$generated/tauri/commands';
 import type { MatrixClient, MatrixEvent } from '$types/matrix-sdk';
 import { ClientEvent, EventType } from '$types/matrix-sdk';
@@ -158,6 +159,9 @@ export function startPushKeyMirror(
       return running;
     }
     lastAt = Date.now();
+    // The notification device (notifyDevice.ts) takes a light sync along, so its to-device
+    // backlog stays short and its one-time keys topped up; nothing without one.
+    void kolpakNotifySync({ userId }).catch(() => undefined);
     const current = copy();
     running = current
       .catch((error: unknown) => log.warn('copying room keys failed', error))
