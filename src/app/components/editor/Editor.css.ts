@@ -18,10 +18,13 @@ export const EditorRow = style({
   alignItems: 'end',
 });
 
+// Kolpak: several lines take the whole width, with the buttons in a row under them. The
+// buttons before the text used to keep a column of their own down the left side, which
+// indented every line by their width while they sat at the bottom anyway.
 export const EditorRowMultiline = style({
   gridTemplateColumns: 'auto 1fr',
   gridTemplateAreas: `
-    "before textarea"
+    "textarea textarea"
     "before after"
   `,
   alignItems: 'start',
@@ -30,7 +33,7 @@ export const EditorRowMultiline = style({
 export const EditorRowMultilineWithResponsiveAfter = style({
   gridTemplateColumns: 'auto 1fr auto',
   gridTemplateAreas: `
-    "before textarea textarea"
+    "textarea textarea textarea"
     "before responsive-after after"
   `,
 });
@@ -77,6 +80,11 @@ export const EditorTextarea = style([
       [`${EditorTextareaScroll}:last-child &`]: {
         paddingRight: toRem(13),
       },
+      // Kolpak: on its own row the text keeps the same inset on both sides.
+      [`${EditorTextareaScrollMultiline} &`]: {
+        paddingLeft: toRem(13),
+        paddingRight: toRem(13),
+      },
       '&:focus': {
         outline: 'none',
       },
@@ -99,6 +107,10 @@ export const EditorTextarea = style([
         left: toRem(13),
       },
       [`${EditorTextareaScroll}:last-child &[data-placeholder-visible="true"]::before`]: {
+        right: toRem(13),
+      },
+      [`${EditorTextareaScrollMultiline} &[data-placeholder-visible="true"]::before`]: {
+        left: toRem(13),
         right: toRem(13),
       },
     },
