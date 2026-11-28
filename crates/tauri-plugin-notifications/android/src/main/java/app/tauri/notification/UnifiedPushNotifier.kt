@@ -191,17 +191,26 @@ object UnifiedPushNotifier {
 
     /** One line for a decrypted event: the message, or what kind of thing was sent. */
     internal fun previewText(event: JSONObject): String? {
+        if (event.optString("type") == "m.sticker") return "Sticker"
         val content = event.optJSONObject("content") ?: return null
         val body = withoutReplyFallback(content.optString("body")).takeIf { it.isNotBlank() }
-        val text = when (content.optString("msgtype")) {
-            "m.image" -> "Image"
-            "m.video" -> "Video"
+        // Media say what they are, not their body (usually the file name); a caption (MSC2530:
+        // a body next to a different `filename`) follows. Mirrors mediaPreviewLabel in
+        // src/app/utils/notificationStyle.ts.
+        val info = content.optJSONObject("info")
+        val animated = info?.optBoolean("fi.mau.gif") == true || info?.optBoolean("fi.mau.loop") == true
+        val kind = when (content.optString("msgtype")) {
+            "m.image" -> if (info?.optString("mimetype") == "image/gif" || animated) "GIF" else "Image"
+            "m.video" -> if (animated) "GIF" else "Video"
             "m.audio" -> if (content.has("org.matrix.msc3245.voice")) "Voice message" else "Audio"
-            "m.file" -> body?.let { "File: $it" } ?: "File"
-            "m.emote" -> body?.let { "* $it" }
-            else -> body
+            "m.file" -> "File"
+            "m.location" -> "Location"
+            "m.emote" -> return body?.let { "* $it" }
+            else -> return body
         }
-        return text ?: if (event.optString("type") == "m.sticker") "Sticker" else null
+        val filename = content.optString("filename").trim()
+        val caption = body?.trim()?.takeIf { filename.isNotEmpty() && it != filename }
+        return if (caption != null) "$kind: $caption" else kind
     }
 
     /** Older clients start a reply's body with the quoted message ("> <@a:b> text"); drop it. */

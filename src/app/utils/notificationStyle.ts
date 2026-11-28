@@ -46,6 +46,47 @@ const getBodyFromContent = (content: unknown): string | undefined => {
   return normalized.length > 0 ? normalized : undefined;
 };
 
+const record = (value: unknown): Record<string, unknown> | undefined =>
+  value && typeof value === 'object' ? (value as Record<string, unknown>) : undefined;
+
+/**
+ * Kolpak: media say what they are ("Image", "GIF", "Sticker"…) instead of their body, which
+ * for media is usually the file name. A caption (MSC2530: a body next to a different
+ * `filename`) follows the kind. Mirrored natively in UnifiedPushNotifier.previewText.
+ */
+export const mediaPreviewLabel = (content: unknown, eventType?: string): string | undefined => {
+  const c = record(content);
+  if (eventType === 'm.sticker') return 'Sticker';
+  if (!c) return undefined;
+  const info = record(c.info);
+  const mimetype = typeof info?.mimetype === 'string' ? info.mimetype : '';
+  const animated = info?.['fi.mau.gif'] === true || info?.['fi.mau.loop'] === true;
+  let kind: string | undefined;
+  switch (c.msgtype) {
+    case 'm.image':
+      kind = mimetype === 'image/gif' || animated ? 'GIF' : 'Image';
+      break;
+    case 'm.video':
+      kind = animated ? 'GIF' : 'Video';
+      break;
+    case 'm.audio':
+      kind = c['org.matrix.msc3245.voice'] !== undefined ? 'Voice message' : 'Audio';
+      break;
+    case 'm.file':
+      kind = 'File';
+      break;
+    case 'm.location':
+      kind = 'Location';
+      break;
+    default:
+      return undefined;
+  }
+  const body = typeof c.body === 'string' ? c.body.trim() : '';
+  const caption =
+    typeof c.filename === 'string' && body.length > 0 && body !== c.filename.trim() ? body : '';
+  return caption ? `${kind}: ${caption}` : kind;
+};
+
 export const resolveNotificationPreviewText = ({
   content,
   eventType,
@@ -73,6 +114,9 @@ export const resolveNotificationPreviewText = ({
   if (encryptedContext && !showEncryptedMessageContent) {
     return ENCRYPTED_MESSAGE_PREVIEW;
   }
+
+  const media = mediaPreviewLabel(content, eventType);
+  if (media) return media;
 
   const body = getBodyFromContent(content);
   if (body) return body;

@@ -301,6 +301,13 @@ class UnifiedPushNotifierTest {
         assertEquals("Voice message", UnifiedPushNotifier.previewText(event("""{"msgtype":"m.audio","body":"a.ogg","org.matrix.msc3245.voice":{}}""")))
         assertEquals("* waves", UnifiedPushNotifier.previewText(event("""{"msgtype":"m.emote","body":"waves"}""")))
         assertEquals("Sticker", UnifiedPushNotifier.previewText(event("""{}""", "m.sticker")))
+        // Media name their kind, not the file: stickers carry a body too.
+        assertEquals("Sticker", UnifiedPushNotifier.previewText(event("""{"body":"cat.png"}""", "m.sticker")))
+        assertEquals("File", UnifiedPushNotifier.previewText(event("""{"msgtype":"m.file","body":"report.pdf"}""")))
+        assertEquals("GIF", UnifiedPushNotifier.previewText(event("""{"msgtype":"m.image","body":"a.gif","info":{"mimetype":"image/gif"}}""")))
+        assertEquals("GIF", UnifiedPushNotifier.previewText(event("""{"msgtype":"m.video","body":"a.mp4","info":{"fi.mau.gif":true}}""")))
+        assertEquals("Image: look", UnifiedPushNotifier.previewText(event("""{"msgtype":"m.image","body":"look","filename":"IMG_1.jpg"}""")))
+        assertEquals("Image", UnifiedPushNotifier.previewText(event("""{"msgtype":"m.image","body":"IMG_1.jpg","filename":"IMG_1.jpg"}""")))
         assertNull(UnifiedPushNotifier.previewText(event("""{}""")))
         assertEquals("ok", UnifiedPushNotifier.previewText(event("""{"msgtype":"m.text","body":"> <@a:b> hi\n> there\n\nok"}""")))
         assertEquals("> just a quote", UnifiedPushNotifier.withoutReplyFallback("> just a quote"))
