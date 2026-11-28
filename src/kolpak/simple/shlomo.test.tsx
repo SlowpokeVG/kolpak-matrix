@@ -27,6 +27,7 @@ const modernStore = async () => {
     useRightBubbles: false,
     hideMembershipEvents: false,
     hideNickAvatarEvents: false,
+    alwaysInlineEditor: false,
   });
   return { store, settingsAtom };
 };
@@ -46,6 +47,7 @@ describe('ShlomoLookSync', () => {
     expect(store.get(settingsAtom).messageLayout).toBe(MessageLayout.Bubble);
     expect(store.get(settingsAtom).useRightBubbles).toBe(true);
     expect(store.get(settingsAtom).hideMembershipEvents).toBe(true);
+    expect(store.get(settingsAtom).alwaysInlineEditor).toBe(true);
     expect(mode.getSimpleMode().before?.messageLayout).toBe(MessageLayout.Modern);
     expect(document.documentElement.classList.contains('kolpak-simple')).toBe(true);
 
@@ -53,6 +55,7 @@ describe('ShlomoLookSync', () => {
     expect(store.get(settingsAtom).messageLayout).toBe(MessageLayout.Modern);
     expect(store.get(settingsAtom).useRightBubbles).toBe(false);
     expect(store.get(settingsAtom).hideMembershipEvents).toBe(false);
+    expect(store.get(settingsAtom).alwaysInlineEditor).toBe(false);
     expect(mode.getSimpleMode().before).toBeUndefined();
     expect(document.documentElement.classList.contains('kolpak-simple')).toBe(false);
     // The room rows are a part of their own.
@@ -64,6 +67,37 @@ describe('ShlomoLookSync', () => {
     act(() => mode.updateSimpleMode({ enabled: false }));
     expect(store.get(settingsAtom).messageLayout).toBe(MessageLayout.Modern);
     expect(document.documentElement.classList.contains('kolpak-simple-rows')).toBe(false);
+  });
+
+  it('adds the inline editor to a look applied before it existed', async () => {
+    localStorage.setItem(
+      'kolpak:simple',
+      JSON.stringify({
+        before: {
+          messageLayout: MessageLayout.Modern,
+          useRightBubbles: false,
+          hideMembershipEvents: false,
+          hideNickAvatarEvents: false,
+        },
+      })
+    );
+    const { ShlomoLookSync } = await import('./ShlomoLookSync');
+    const mode = await import('./simpleMode');
+    const { store, settingsAtom } = await modernStore();
+    // The look's other settings were applied back then.
+    store.set(settingsAtom, { ...store.get(settingsAtom), messageLayout: MessageLayout.Bubble });
+    render(
+      <Provider store={store}>
+        <ShlomoLookSync />
+      </Provider>
+    );
+    expect(store.get(settingsAtom).alwaysInlineEditor).toBe(true);
+    expect(mode.getSimpleMode().before?.alwaysInlineEditor).toBe(false);
+    expect(store.get(settingsAtom).messageLayout).toBe(MessageLayout.Bubble);
+
+    act(() => mode.setShlomoPart('look', false));
+    expect(store.get(settingsAtom).alwaysInlineEditor).toBe(false);
+    expect(store.get(settingsAtom).messageLayout).toBe(MessageLayout.Modern);
   });
 
   it('leaves the settings alone for someone who switched the mode off', async () => {

@@ -16,6 +16,8 @@ export type SableSettingsSnapshot = {
   useRightBubbles: boolean;
   hideMembershipEvents: boolean;
   hideNickAvatarEvents: boolean;
+  /** Added later: absent in a snapshot taken before the look set it (ShlomoLookSync). */
+  alwaysInlineEditor?: boolean;
 };
 
 export type ShlomoPart =
@@ -33,7 +35,7 @@ export const SHLOMO_PARTS: readonly { id: ShlomoPart; title: string; description
     id: 'look',
     title: 'Messenger look',
     description:
-      'The system font, rounded corners, chat bubbles with yours on the right, no join/leave or name-change lines.',
+      'The system font, rounded corners, chat bubbles with yours on the right, no join/leave or name-change lines, the message field growing upwards beside its buttons.',
   },
   {
     id: 'roomPreviews',
@@ -104,7 +106,8 @@ const isSnapshot = (value: unknown): value is SableSettingsSnapshot => {
     typeof v.messageLayout === 'number' &&
     typeof v.useRightBubbles === 'boolean' &&
     typeof v.hideMembershipEvents === 'boolean' &&
-    typeof v.hideNickAvatarEvents === 'boolean'
+    typeof v.hideNickAvatarEvents === 'boolean' &&
+    (v.alwaysInlineEditor === undefined || typeof v.alwaysInlineEditor === 'boolean')
   );
 };
 
