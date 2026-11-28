@@ -15,6 +15,7 @@ import { UnreadBadge } from '$components/unread-badge';
 import { useNavToActivePathMapper } from '$hooks/useNavToActivePathMapper';
 import { PageNavContent, PageNavHeader } from '$components/page';
 import { PageNavShell } from '$components/page/PageNavShell';
+import { ShlomoBackButton } from '../../../../kolpak/simple/ShlomoMenuRows';
 import { useSidebarWidth } from '$hooks/useSidebarWidth';
 import { useInviteCount } from '$hooks/useInviteCount';
 import { useInboxNotificationCount } from '$hooks/useInboxNotificationCount';
@@ -111,7 +112,11 @@ export function Inbox() {
     <PageNavShell
       header={
         <PageNavHeader size="600">
-          <Box grow="Yes" gap="300" justifyContent="Center">
+          <Box grow="Yes" gap="300" justifyContent="Center" style={{ position: 'relative' }}>
+            {/* Kolpak: no tab bar in Shlomo mode, so a way back to the chats. */}
+            <Box alignItems="Center" style={{ position: 'absolute', left: 0, top: 0, bottom: 0 }}>
+              <ShlomoBackButton />
+            </Box>
             {!hideText ? (
               <Box grow="Yes">
                 <Text

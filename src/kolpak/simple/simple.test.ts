@@ -39,7 +39,7 @@ describe('sanitizeSimpleMode', () => {
     roomPreviews: true,
     oneList: true,
     noSpaceRail: true,
-    twoTabs: true,
+    noTabs: true,
     fewerSettings: true,
     openMainRoom: true,
   };
@@ -58,7 +58,7 @@ describe('sanitizeSimpleMode', () => {
       sanitizeSimpleMode({
         enabled: false,
         mainRoomId: '!a',
-        parts: { look: false, twoTabs: 'yes', junk: true },
+        parts: { look: false, noTabs: 'yes', junk: true },
         junk: 1,
       })
     ).toEqual({

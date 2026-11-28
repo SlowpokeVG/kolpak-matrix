@@ -5,8 +5,6 @@ import { SettingsTab } from './SettingsTab';
 import * as css from './UserQuickTools.css';
 import { UserMenuTab } from './UserMenuTab';
 import { MessageTab } from './MessageTab';
-import { useShlomo } from '../../../../kolpak/simple/simpleMode';
-import { ShlomoSettingsTab } from '../../../../kolpak/simple/ShlomoSettingsTab';
 
 export function UserQuickTools({
   width,
@@ -18,8 +16,6 @@ export function UserQuickTools({
   compact: boolean;
 }) {
   const isCollapsed = compact ? false : (width ?? 0) < 190 + 66;
-  // Kolpak: Shlomo mode's two tabs on a phone; the inbox and search move into Settings.
-  const twoTabs = useShlomo('twoTabs');
 
   return (
     <>
@@ -46,12 +42,7 @@ export function UserQuickTools({
                   }
             }
           >
-            {compact && twoTabs ? (
-              <>
-                <MessageTab isBottom isMobile />
-                <ShlomoSettingsTab />
-              </>
-            ) : compact ? (
+            {compact ? (
               <>
                 <MessageTab isBottom isMobile />
                 <InboxTab isBottom isMobile />

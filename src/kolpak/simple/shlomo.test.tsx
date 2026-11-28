@@ -95,24 +95,24 @@ describe('ShlomoLookSync', () => {
   });
 });
 
-describe('MobileFriendlyBottomNav', () => {
-  const shown = async (path: string, size = ScreenSize.Mobile) => {
-    const { MobileFriendlyBottomNav } = await import('$pages/MobileFriendly');
-    const { ScreenSizeProvider } = await import('$hooks/useScreenSize');
-    const { container, unmount } = render(
-      <ScreenSizeProvider value={size}>
-        <MemoryRouter initialEntries={[path]}>
-          <MobileFriendlyBottomNav>
-            <span data-testid="bar" />
-          </MobileFriendlyBottomNav>
-        </MemoryRouter>
-      </ScreenSizeProvider>
-    );
-    const result = container.querySelector('[data-testid="bar"]') !== null;
-    unmount();
-    return result;
-  };
+const shown = async (path: string, size = ScreenSize.Mobile) => {
+  const { MobileFriendlyBottomNav } = await import('$pages/MobileFriendly');
+  const { ScreenSizeProvider } = await import('$hooks/useScreenSize');
+  const { container, unmount } = render(
+    <ScreenSizeProvider value={size}>
+      <MemoryRouter initialEntries={[path]}>
+        <MobileFriendlyBottomNav>
+          <span data-testid="bar" />
+        </MobileFriendlyBottomNav>
+      </MemoryRouter>
+    </ScreenSizeProvider>
+  );
+  const result = container.querySelector('[data-testid="bar"]') !== null;
+  unmount();
+  return result;
+};
 
+describe('MobileFriendlyBottomNav', () => {
   it('is on every tab page of a phone, room lists included', async () => {
     expect(await shown('/home/')).toBe(true);
     expect(await shown('/direct/')).toBe(true);
@@ -129,4 +129,33 @@ describe('MobileFriendlyBottomNav', () => {
     expect(await shown('/settings/')).toBe(false);
     expect(await shown('/home/', ScreenSize.Desktop)).toBe(false);
   });
+});
+
+describe('useShlomoMenu', () => {
+  const standsIn = async (size: ScreenSize) => {
+    const { useShlomoMenu } = await import('./ShlomoMenuRows');
+    const { ScreenSizeProvider } = await import('$hooks/useScreenSize');
+    let result: boolean | undefined;
+    function Probe() {
+      result = useShlomoMenu();
+      return null;
+    }
+    render(
+      <ScreenSizeProvider value={size}>
+        <Probe />
+      </ScreenSizeProvider>
+    );
+    return result;
+  };
+
+  it('replaces the tab bar on a phone while the part is on', async () => {
+    expect(await standsIn(ScreenSize.Mobile)).toBe(true);
+    expect(await standsIn(ScreenSize.Desktop)).toBe(false);
+    // The menu's module pulls in the settings screens: the first import is slow.
+  }, 30_000);
+
+  it('leaves the tab bar when the part is off', async () => {
+    localStorage.setItem('kolpak:simple', JSON.stringify({ parts: { noTabs: false } }));
+    expect(await standsIn(ScreenSize.Mobile)).toBe(false);
+  }, 30_000);
 });

@@ -31,9 +31,9 @@ export function ShlomoLookSync() {
       updateSimpleMode({
         before: {
           messageLayout: typeof messageLayout === 'number' ? messageLayout : MessageLayout.Modern,
-          useRightBubbles: useRightBubbles === true,
-          hideMembershipEvents: hideMembershipEvents === true,
-          hideNickAvatarEvents: hideNickAvatarEvents === true,
+          useRightBubbles: Boolean(useRightBubbles),
+          hideMembershipEvents: Boolean(hideMembershipEvents),
+          hideNickAvatarEvents: Boolean(hideNickAvatarEvents),
         },
       });
       setMessageLayout(MessageLayout.Bubble);

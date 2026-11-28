@@ -108,6 +108,11 @@ import { useRenderableMediaUrl } from '$hooks/useRenderableMediaUrl';
 import { ModalOverlay } from '$components/modal-overlay/ModalOverlay';
 import { useOpenRoomSettings } from '$state/hooks/roomSettings';
 import { ResponsiveMenu } from '$components/ResponsiveMenu';
+import {
+  ShlomoMenuDot,
+  ShlomoMenuRows,
+  useShlomoMenuBadge,
+} from '../../../../kolpak/simple/ShlomoMenuRows';
 import { useMenuAnchor } from '$hooks/useMenuAnchor';
 import { Button } from '$components/button';
 
@@ -266,11 +271,14 @@ const SpaceMenu = forwardRef<HTMLDivElement, SpaceMenuProps>(({ room, requestClo
           )}
         </UseStateProvider>
       </Box>
+      {/* Kolpak: with Shlomo mode's "No bar at the bottom", the bar's places. */}
+      <ShlomoMenuRows requestClose={requestClose} />
     </Menu>
   );
 });
 
 function SpaceHeader({ hideText, mx }: { hideText?: boolean; mx: MatrixClient }) {
+  const inbox = useShlomoMenuBadge();
   const space = useSpace();
   const spaceName = useRoomName(space);
   const menu = useMenuAnchor();
@@ -345,12 +353,16 @@ function SpaceHeader({ hideText, mx }: { hideText?: boolean; mx: MatrixClient })
                   <IconButton
                     aria-pressed={!!menu.anchor}
                     variant="Background"
-                    style={hasBanner ? { backgroundColor: 'transparent', color: '#fff' } : {}}
+                    style={{
+                      position: 'relative',
+                      ...(hasBanner ? { backgroundColor: 'transparent', color: '#fff' } : {}),
+                    }}
                     onClick={menu.triggerProps.onClick}
                   >
                     {composerIcon(DotsThreeOutlineVerticalIcon, {
                       weight: menu.anchor ? 'fill' : 'regular',
                     })}
+                    <ShlomoMenuDot count={inbox} />
                   </IconButton>
                 </Box>
               </Box>

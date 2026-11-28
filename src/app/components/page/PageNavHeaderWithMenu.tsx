@@ -5,6 +5,7 @@ import { composerIcon, DotsThreeOutlineVerticalIcon } from '$components/icons/ph
 import { PageNavHeader } from '$components/page';
 import { ResponsiveMenu } from '$components/ResponsiveMenu';
 import { JumpTo } from '../../../kolpak/layout/JumpTo';
+import { ShlomoMenuDot, useShlomoMenuBadge } from '../../../kolpak/simple/ShlomoMenuRows';
 
 type PageNavHeaderWithMenuProps = {
   hideText?: boolean;
@@ -27,6 +28,8 @@ export function PageNavHeaderWithMenu({
   requestClose,
   triggerProps,
 }: PageNavHeaderWithMenuProps) {
+  // Kolpak: a dot while the inbox has something and the menu holds it (Shlomo mode).
+  const inbox = useShlomoMenuBadge();
   return (
     <>
       <PageNavHeader size="600">
@@ -48,10 +51,12 @@ export function PageNavHeaderWithMenu({
                 aria-pressed={!!anchor}
                 variant="Background"
                 onClick={triggerProps.onClick}
+                style={{ position: 'relative' }}
               >
                 {composerIcon(DotsThreeOutlineVerticalIcon, {
                   weight: anchor ? 'fill' : 'regular',
                 })}
+                <ShlomoMenuDot count={inbox} />
               </IconButton>
             </Box>
           </Box>

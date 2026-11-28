@@ -8,6 +8,7 @@ import { roomToUnreadAtom } from '$state/room/roomToUnread';
 import { useRoomsUnread } from '$state/hooks/unread';
 import { markAsRead } from '$utils/notifications';
 import { Checks, menuIcon } from '$components/icons/phosphor';
+import { ShlomoMenuRows } from '../../../kolpak/simple/ShlomoMenuRows';
 
 type NavMenuProps = {
   rooms: string[];
@@ -43,6 +44,8 @@ export const NavMenu = forwardRef<HTMLDivElement, NavMenuProps>(
           </MenuItem>
           {children}
         </Box>
+        {/* Kolpak: with Shlomo mode's "No bar at the bottom", the bar's places. */}
+        <ShlomoMenuRows requestClose={requestClose} />
       </Menu>
     );
   }

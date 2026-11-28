@@ -3,8 +3,8 @@ import { useSyncExternalStore } from 'react';
 // Shlomo mode (AI/HANDOFF.md, "Simple mode"): the everyday layout, made of parts that can be
 // switched one by one under one master switch, all on by default. One community, so fewer
 // settings and none of the room-management actions; a messenger's look; a room list with
-// avatars, the last message and its time; every chat in one list; two tabs at the bottom of
-// a phone; and a main room that opens when the app starts.
+// avatars, the last message and its time; every chat in one list; no tab bar on a phone
+// (its places in the ⋮ menu); and a main room that opens when the app starts.
 //
 // Per device, in Kolpak's own storage, like the voice settings. Classes on <html> switch the
 // styles (simple.css, simpleTheme.css.ts): `kolpak-simple` for the look, `kolpak-simple-rows`
@@ -23,7 +23,7 @@ export type ShlomoPart =
   | 'roomPreviews'
   | 'oneList'
   | 'noSpaceRail'
-  | 'twoTabs'
+  | 'noTabs'
   | 'fewerSettings'
   | 'openMainRoom';
 
@@ -53,10 +53,10 @@ export const SHLOMO_PARTS: readonly { id: ShlomoPart; title: string; description
       'On a phone, the list of chats takes the whole width. Best with all chats in one list, where the rooms of spaces are.',
   },
   {
-    id: 'twoTabs',
-    title: 'Two tabs at the bottom',
+    id: 'noTabs',
+    title: 'No bar at the bottom',
     description:
-      'On a phone: Messages, and Settings with the inbox, search and your account in it.',
+      'On a phone: the inbox, search, your account and the settings are in the ⋮ menu of the chat list.',
   },
   {
     id: 'fewerSettings',
@@ -75,7 +75,7 @@ const ALL_PARTS: Record<ShlomoPart, boolean> = {
   roomPreviews: true,
   oneList: true,
   noSpaceRail: true,
-  twoTabs: true,
+  noTabs: true,
   fewerSettings: true,
   openMainRoom: true,
 };
